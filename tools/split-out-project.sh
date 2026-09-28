@@ -13,6 +13,7 @@ set -euo pipefail
 NAME="${1:?usage: split-out-project.sh <name> <plannit git URL> [<plannit ref>]}"; URL="${2:?plannit git URL}"; REF="${3:-}"
 [ -f "projects/$NAME/project.conf" ] || { echo "!! no projects/$NAME/project.conf here — run at the checkout's root"; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "!! the working tree is not clean — commit or stash first"; git status --short; exit 1; }
+[ ! -e plannit ] || { echo "!! ./plannit already exists"; exit 1; }
 
 # 1. keep what belongs to the project from the tool's side of the old layout
 [ -f farm/farm.conf ] && { cp farm/farm.conf farm.conf.keep; echo '
@@ -24,9 +25,23 @@ for p in engine farm site tools lib README.md .gitignore publish.sh; do
   [ -e "$p" ] && git rm -rq "$p"
 done
 for p in projects/*; do [ "$p" = "projects/$NAME" ] || git rm -rq "$p"; done
+# what git ignored in the tool's folders: interpreter caches go; anything else is reported, not deleted
+for p in engine farm site tools lib $(ls -d projects/* 2>/dev/null | grep -v "^projects/$NAME$"); do
+  [ -d "$p" ] || continue
+  find "$p" -name __pycache__ -type d -prune -exec rm -rf {} +; find "$p" -depth -type d -empty -delete
+  [ -e "$p" ] && echo "!! left in $p (not tracked by git, not deleted): $(find "$p" -type f | head -3 | tr '\n' ' ')"
+done
 
 # 3. the project to the root
-( shopt -s dotglob; for f in "projects/$NAME"/*; do git mv "$f" .; done )
+# tracked files with git mv; then what git ignores (caches, build-site/, tmp/ drafts) with a plain mv, so nothing is lost
+( shopt -s dotglob
+  for f in "projects/$NAME"/*; do [ -n "$(git ls-files -- "$f")" ] && git mv "$f" .; done
+  for f in "projects/$NAME"/*; do
+    [ -e "$f" ] || continue
+    b="$(basename "$f")"
+    if [ -e "$b" ]; then [ "$b" = __pycache__ ] && rm -rf "$f" || echo "!! left in place (./$b exists): $f"
+    else mv "$f" .; fi
+  done )
 rmdir "projects/$NAME" projects 2>/dev/null || true
 [ -f farm.conf.keep ] && mv farm.conf.keep farm.conf && git add farm.conf
 
