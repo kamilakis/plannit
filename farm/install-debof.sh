@@ -9,9 +9,13 @@ ssh nuc 'cat ~/.config/plannit/farm.conf' > ~/.config/render-watch.conf \
   || { echo "!! no ~/.config/plannit/farm.conf on debnuc — copy plannit's farm/farm.conf.example there first"; exit 1; }
 . ~/.config/render-watch.conf
 FARM="$PLANNIT_DIR/farm"
-ssh nuc "cat ~/$FARM/render-watch.sh" > ~/.local/bin/render-watch && chmod +x ~/.local/bin/render-watch
-ssh nuc "cat ~/$FARM/render-watch.service" > ~/.config/systemd/user/render-watch.service
-bash -n ~/.local/bin/render-watch && bash -n ~/.config/render-watch.conf
+# write to a new file and rename over the old one: the running watcher is a bash script, and bash reads its
+# script as it goes — truncating it in place under a live process can make it run garbage
+ssh nuc "cat ~/$FARM/render-watch.sh" > ~/.local/bin/render-watch.new && chmod +x ~/.local/bin/render-watch.new
+ssh nuc "cat ~/$FARM/render-watch.service" > ~/.config/systemd/user/render-watch.service.new
+bash -n ~/.local/bin/render-watch.new && bash -n ~/.config/render-watch.conf
+mv -f ~/.local/bin/render-watch.new ~/.local/bin/render-watch
+mv -f ~/.config/systemd/user/render-watch.service.new ~/.config/systemd/user/render-watch.service
 # the service runs without your desktop's ssh-agent: the key to debnuc must work on its own
 env -u SSH_AUTH_SOCK ssh -o BatchMode=yes -o ConnectTimeout=10 nuc 'echo key-ok' \
   || echo "!! ssh nuc needs the agent/passphrase — the service will not reach debnuc"
@@ -20,7 +24,8 @@ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader || echo "!! no 
 sudo loginctl enable-linger "$USER"
 loginctl show-user "$USER" -p Linger
 systemctl --user daemon-reload
-systemctl --user enable --now render-watch.service
+systemctl --user enable render-watch.service
+systemctl --user restart render-watch.service     # enable --now leaves an already-running (old) watcher running
 sleep 5
 systemctl --user --no-pager status render-watch.service | head -12
 journalctl --user -u render-watch --no-pager -n 10
