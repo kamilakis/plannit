@@ -1,0 +1,13 @@
+[Unit]
+Description=Render watcher: pull Blender jobs from debnuc (~/render-queue) and render on the GPU
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/render-watch
+Restart=always
+RestartSec=30
+Nice=5
+
+[Install]
+WantedBy=default.target

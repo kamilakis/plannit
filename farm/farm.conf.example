@@ -1,0 +1,11 @@
+# farm.conf — YOUR render farm: one box queues jobs (here called debnuc), one GPU box renders them (debof).
+# Copy to ~/.config/plannit/farm.conf on the queueing box (or point $PLANNIT_FARM_CONF at it) and fill it in;
+# install-debof.sh copies it to the render box. Sourced by render-submit, render-watch and site/publish.sh.
+# Each value can be overridden from the environment.
+: "${DEBOF_IP:=192.168.1.20}"              # the render box, for ping (is it awake?)
+: "${DEBOF_MAC:=00:00:00:00:00:00}"        # ... and wake-on-LAN
+: "${DEBOF_BCAST:=192.168.1.255}"          # the LAN's broadcast address, where the magic packet goes
+: "${RENDER_REMOTE:=nuc}"                  # the render box's ssh alias for the queueing box (it pulls; it is never pushed to)
+: "${RENDER_QUEUE:=render-queue}"          # the queue, relative to the home directory on the queueing box
+: "${RENDER_POLL:=20}"                     # seconds between the render box's checks
+: "${PLANNIT_DIR:=plannit}"                # plannit on the queueing box, relative to home: where install-debof.sh fetches from

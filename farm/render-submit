@@ -1,0 +1,76 @@
+#!/bin/bash
+# render-submit — runs on debnuc. Queues a Blender render job for the watcher on debof.
+#
+#   render-submit <project | dir | scene.py> [preset] [passes] [name]
+#     project  a project folder (with project.conf) or a name under plannit's projects/ — packed with
+#              farm/pack.sh first (the usual way)
+#     env SPP=… / PCT=… override the preset's samples / resolution % for this job
+#     preset  draft | final | max                         (default final)
+#     passes  "MODE:CAMS ..."                             (default "interior:all cutaway:all plan:all")
+#     name    job name                                     (default: project / directory name)
+#   render-submit --status          show the queue
+#   render-submit --wake            only send wake-on-LAN to debof
+#
+# A directory is copied whole (scene.py plus any assets; renders*/web/scene-history are skipped).
+# Machines, addresses and the queue path: ~/.config/plannit/farm.conf (or $PLANNIT_FARM_CONF), from
+# farm/farm.conf.example.
+# Results: ~/render-queue/done/<job>/renders/  (or failed/<job>/, see render.log and STATUS).
+set -euo pipefail
+HERE="$(dirname "$(realpath "$0")")"            # farm/ in plannit, also when run through a symlink
+. "$HERE/../lib/common.sh"
+farm_conf || exit 1
+Q="$HOME/$RENDER_QUEUE"
+mkdir -p "$Q"/{incoming,running,done,failed,.staging}
+
+wake(){
+  ping -c1 -W1 "$DEBOF_IP" >/dev/null 2>&1 && return 0
+  python3 - "$DEBOF_MAC" "$DEBOF_BCAST" <<'EOF'
+import socket, sys
+mac = bytes.fromhex(sys.argv[1].replace(':', '')); pkt = b'\xff' * 6 + mac * 16
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+for port in (9, 7): s.sendto(pkt, (sys.argv[2], port))
+EOF
+  echo "debof was asleep — wake-on-LAN sent"
+}
+
+status(){
+  for d in incoming running done failed; do
+    printf '%-9s' "$d:"; ls -1tr "$Q/$d" 2>/dev/null | tail -8 | tr '\n' ' '; echo
+  done
+  ping -c1 -W1 "$DEBOF_IP" >/dev/null 2>&1 && echo "debof: up" || echo "debof: down"
+}
+
+case "${1:-}" in
+  ""|-h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+  --status) status; exit 0 ;;
+  --wake) wake; exit 0 ;;
+esac
+
+# a project (a folder with project.conf, or a name under projects/): pack engine + project, submit that
+if [ -f "$1/project.conf" ] || { [ ! -e "$1" ] && [ -f "$HERE/../projects/$1/project.conf" ]; }; then
+  set -- "$("$HERE/pack.sh" "$1")" "${@:2}"
+fi
+[ -e "$1" ] || { echo "render-submit: $1 is neither a project nor a directory or script"; exit 1; }
+SRC="$(realpath "$1")"; PRESET="${2:-final}"; PASSES="${3:-interior:all cutaway:all plan:all}"
+case "$PRESET" in draft|final|max) ;; *) echo "preset must be draft|final|max"; exit 1 ;; esac
+# 2026-09-25: finals at 128 samples, not the watcher's 256 — measured on 6 views: time is linear in samples and
+# with the denoiser 128 is indistinguishable from 256 at 1:1. `max` keeps 512. SPP=… still overrides.
+[ "$PRESET" = final ] && : "${SPP:=128}"
+if [ -d "$SRC" ]; then DIR="$SRC"; SCENE=scene.py; else DIR="$(dirname "$SRC")"; SCENE="$(basename "$SRC")"; fi
+[ -f "$DIR/$SCENE" ] || { echo "no $SCENE in $DIR"; exit 1; }
+NAME="${4:-$(basename "$DIR")}"
+JOB="$(date +%Y%m%d-%H%M%S)-${NAME//[^A-Za-z0-9._-]/_}-$PRESET"
+
+rsync -a --copy-unsafe-links --exclude 'renders*' --exclude 'renders-draft-cpu' --exclude web --exclude 'scene-history' --exclude '__pycache__' --exclude '*.log' \
+  "$DIR/" "$Q/.staging/$JOB/"
+cat > "$Q/.staging/$JOB/job.conf" <<EOF
+SCENE=$SCENE
+PRESET=$PRESET
+PASSES="$PASSES"
+${SPP:+SPP=$SPP}
+${PCT:+PCT=$PCT}
+EOF
+mv "$Q/.staging/$JOB" "$Q/incoming/$JOB"      # atomic: the watcher never sees a half-copied job
+echo "queued $JOB"
+wake
+echo "results will appear in $Q/done/$JOB/renders/"
