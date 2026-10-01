@@ -40,11 +40,16 @@ def base():
     for _w, x0, x1, z0, z1 in model.demolished(X, PR): sh.walls([(x0, x1, z0, z1, 'demolished')], [])
     for q in cutaways: sh.solid('DEMOLISHED_FILL', q); sh.pline('DEMOLISHED', q)
     sh.walls(walls, opens)
-    # openings the proposal narrows: the part that is bricked up is new masonry
+    # openings the proposal narrows or moves: the part of the OLD opening the new one no longer covers is new
+    # masonry — only inside the old span, and only where the wall still stands (not demolished, not resized away)
     for oid, ch in PR.OPENING_CHANGES.items():
         if not ch or ch == 'merged': continue
-        wid, a, b = X.OPENINGS[oid][:3]; x0, x1, z0, z1 = X.WALLS[wid][:4]; ax = model.along_x(X, wid)
-        for u0, u1 in ((a, ch[0]), (ch[1], b)):
+        wid, a, b = X.OPENINGS[oid][:3]
+        if wid in PR.DEMOLISH: continue
+        x0, x1, z0, z1 = PR.RESIZE.get(wid, X.WALLS[wid][:4]); ax = model.along_x(X, wid)
+        lo, hi = (x0, x1) if ax else (z0, z1)
+        for u0, u1 in ((a, min(b, ch[0])), (max(a, ch[1]), b)):
+            u0, u1 = max(u0, lo), min(u1, hi)
             if u1 - u0 > 0.01:
                 q = rect(u0, u1, z0, z1) if ax else rect(x0, x1, u0, u1); sh.solid('NEW_WALLS', q); sh.pline('WALLS', q); sh.solids.append(q)
     sh.columns([c[:4] for c in X.COLUMNS.values()])
