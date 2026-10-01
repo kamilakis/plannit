@@ -2,7 +2,7 @@
 the 'house' collection; box() also records SHAPES, wall() WALLS and OPENINGS for the technical sheets."""
 import bpy, math
 from mathutils import Vector
-from .ctx import MODE, CUT, CEIL, INTERIOR, SHAPES, WALLS, OPENINGS
+from .ctx import MODE, CUT, CEIL, INTERIOR, SHAPES, WALLS, OPENINGS, SLIDING_OPEN
 from .materials import M
 S = bpy.context.scene
 
@@ -72,7 +72,8 @@ def wall(x0, x1, z0, z1, openings=(), m='wall', tag='old', new_openings=()):
     for a, b, sill, head, kind in sorted(openings):
         piece(u, a, 0, CEIL)
         piece(a, b, 0, sill); piece(a, b, head, CEIL)
-        if kind in ('window', 'glazed', 'sliding'): window_frame(along_x, a, b, (z0 + z1) / 2 if along_x else (x0 + x1) / 2, sill, head)
+        if kind == 'sliding': sliding_door(along_x, a, b, (z0 + z1) / 2 if along_x else (x0 + x1) / 2, sill, head)
+        elif kind in ('window', 'glazed'): window_frame(along_x, a, b, (z0 + z1) / 2 if along_x else (x0 + x1) / 2, sill, head)
         OPENINGS.append((x0, x1, z0, z1, along_x, a, b, sill, head, kind, tag == 'new' or a in new_openings, tag))
         u = b
     piece(u, hi, 0, CEIL)
@@ -85,6 +86,24 @@ def window_frame(along_x, a, b, c, sill, head, t=0.05, d=0.06):
     if b - a > 1.2: fb((a + b) / 2 - t / 2, (a + b) / 2 + t / 2, sill, head)
     if along_x: box(a, b, c - 0.004, c + 0.004, sill, head, 'glass', name='glass')
     else: box(c - 0.004, c + 0.004, a, b, sill, head, 'glass', name='glass')
+
+def sliding_door(along_x, a, b, c, sill, head, t=0.05, track=0.07):
+    """Glazed sliding door: a perimeter frame and one framed glass panel per track (~1.2 m each), slid
+    SLIDING_OPEN of the way to the far end `b` (0 = closed across the opening, 1 = stacked at b)."""
+    def fb(a0, a1, d0, d1, h0, h1, m='frame', name='frame'):
+        if along_x: box(a0, a1, d0, d1, h0, h1, m, name=name)
+        else: box(d0, d1, a0, a1, h0, h1, m, name=name)
+    n = max(2, math.ceil((b - a) / 1.2)); w = (b - a) / n + t        # panels overlap by one stile
+    depth = n * track
+    fb(a, a + t, c - depth / 2, c + depth / 2, sill, head); fb(b - t, b, c - depth / 2, c + depth / 2, sill, head)
+    fb(a, b, c - depth / 2, c + depth / 2, sill, sill + 0.02); fb(a, b, c - depth / 2, c + depth / 2, head - t, head)
+    for i in range(n):
+        p0 = a + i * (b - a) / n - (t / 2 if i else 0)
+        p0 += SLIDING_OPEN * ((b - w) - p0)
+        d = c + (i - (n - 1) / 2) * track
+        fb(p0, p0 + t, d - 0.02, d + 0.02, sill + 0.02, head - t); fb(p0 + w - t, p0 + w, d - 0.02, d + 0.02, sill + 0.02, head - t)
+        fb(p0, p0 + w, d - 0.02, d + 0.02, sill + 0.02, sill + 0.02 + t); fb(p0, p0 + w, d - 0.02, d + 0.02, head - 2 * t, head - t)
+        fb(p0 + t, p0 + w - t, d - 0.004, d + 0.004, sill + 0.02 + t, head - 2 * t, 'glass', 'glass')
 
 def rod(p0, p1, r=0.02, m='black'):
     a = Vector((p0[0], -p0[1], p0[2])); b = Vector((p1[0], -p1[1], p1[2])); d = b - a

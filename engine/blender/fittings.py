@@ -21,8 +21,10 @@ def _span(f, c, d0, d1):
     a, b = c + f * d0, c + f * d1
     return (a, b) if a < b else (b, a)
 
-def curtain(along_x, a, b, c, f, sides='both', bot=0.0):
-    """Floor-length drapes: sheer across the glass, blackout gathered in pleats at `sides` ('a','b','both')."""
+def curtain(along_x, a, b, c, f, sides='both', bot=0.0, drawn_open=None):
+    """Floor-length drapes: sheer across the glass, blackout gathered in pleats at `sides` ('a','b','both').
+    drawn_open: True/False forces this one open or closed; None follows the mode (open at night)."""
+    CURTAINS_OPEN = globals()['CURTAINS_OPEN'] if drawn_open is None else drawn_open
     top = CEIL - 0.10
     s0, s1 = _span(f, c, SHEER_D - 0.012, SHEER_D + 0.012)
     t0, t1 = _span(f, c, 0.13, 0.42)

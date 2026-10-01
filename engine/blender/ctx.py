@@ -14,7 +14,7 @@ OPENINGS = []  # (x0, x1, z0, z1, along_x, a, b, sill, head, kind, is_new) — r
 def setup(argv, project, views, ceil):
     """argv = the arguments after '--': MODE CAMS PCT SAMPLES. `views` = the project's views module
     (palettes, cut heights); `ceil` = the project's single ceiling height."""
-    global MODE, PALETTE, SUFFIX, INTERIOR, CAMS, PCT, SAMPLES, PROJECT, OUT, CEIL, CUT, PAL, PAL_PLANKS
+    global MODE, PALETTE, SUFFIX, INTERIOR, CAMS, PCT, SAMPLES, PROJECT, OUT, CEIL, CUT, PAL, PAL_PLANKS, SLIDING_OPEN
     MODE = argv[0] if argv else 'interior'
     # colour scheme: append '-b' to the mode (interior-b, night-b, cutaway-b, plan-b) for palette B; '-c' and
     # '-d' (2026-09-22) are the two stricter candidates C and D. Output files get a matching _b/_c/_d suffix.
@@ -31,3 +31,5 @@ def setup(argv, project, views, ceil):
     # the section height of the cut-open views: the project's views.CUTS per mode, else the full height
     CUT = views.CUTS.get(MODE, CEIL)
     PAL, PAL_PLANKS = views.PALETTES.get(PALETTE, ({}, {}))
+    # how far every 'sliding' opening is slid open: 0 closed .. 1 all panels stacked at its far end (views.SLIDING_OPEN)
+    SLIDING_OPEN = float(getattr(views, 'SLIDING_OPEN', 0.0))
