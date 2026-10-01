@@ -3,7 +3,8 @@
 existing.py (the flat today), required: CEIL, WALLS {id: (x0, x1, z0, z1, …)}, OPENINGS {id: (wall id, a, b, kind,
   sill, head, src, note)} with head None = unmeasured, ROOMS {name: (rects, label point)}.
   Optional (empty if absent): CLOSET_FRONTS, BEAMS, COLUMNS, FITTINGS.
-proposal.py (the renovation as changes), required: ROOMS. Optional: DEMOLISH, RESIZE, OPENING_CHANGES,
+proposal.py (the renovation as changes), required: ROOMS. Optional: DEMOLISH, RESIZE, OPENING_CHANGES
+  (id -> new (a, b, sill, head, kind) | None = bricked up | 'merged' = swallowed by a neighbour widened over it),
   NEW_OPENINGS, NEW_WALLS, ASSUMED_HEAD (a head for each unmeasured opening that stays), CLOSET_FRONTS,
   REMOVE_FITTINGS.
 Frame: x, z metres; walls are axis-aligned rectangles; openings run along a wall's long axis.
@@ -44,6 +45,7 @@ def walls(X, P):
             if oid in P.OPENING_CHANGES:
                 ch = P.OPENING_CHANGES[oid]
                 if ch is None: infill.append((a, b)); continue
+                if ch == 'merged': continue                           # absorbed by a neighbour's widened opening
                 ops.append(ch)
                 if ch[1] - ch[0] > b - a + 0.01: cut.append(ch[0])    # widened = cut into the wall
                 continue

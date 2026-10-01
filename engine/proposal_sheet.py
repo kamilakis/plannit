@@ -28,7 +28,12 @@ def base():
             hd = ('~' if oid in PR.ASSUMED_HEAD else '') + m2(head)
             spec = None if kind == 'closet' else (m2(b - a), hd, m2(sill) if kind == 'window' else None)
             opens.append(('door' if kind == 'glazed' else kind, pa, pb, t, spec))
-            if a in cut: cutaways.append(rect(a, b, z0, z1) if ax else rect(x0, x1, a, b))   # masonry removed for it
+            if a in cut:   # masonry removed for it — not where a merged opening already was
+                gaps = sorted(X.OPENINGS[m][1:3] for m, ch in PR.OPENING_CHANGES.items() if ch == 'merged' and X.OPENINGS[m][0] == wid)
+                u = a
+                for g0, g1 in gaps + [(b, b)]:
+                    if min(g0, b) - u > 1e-4: cutaways.append(rect(u, min(g0, b), z0, z1) if ax else rect(x0, x1, u, min(g0, b)))
+                    u = max(u, g1)
     for c, u0, u1, ax in PR.CLOSET_FRONTS.values():
         opens.append(('closet', (u0, c) if ax else (c, u0), (u1, c) if ax else (c, u1), 0.02, None))
     sh = Sheet(PR.ROOMS, sheets.CIRCULATION, sheets.LABELS)
@@ -37,7 +42,7 @@ def base():
     sh.walls(walls, opens)
     # openings the proposal narrows: the part that is bricked up is new masonry
     for oid, ch in PR.OPENING_CHANGES.items():
-        if not ch: continue
+        if not ch or ch == 'merged': continue
         wid, a, b = X.OPENINGS[oid][:3]; x0, x1, z0, z1 = X.WALLS[wid][:4]; ax = model.along_x(X, wid)
         for u0, u1 in ((a, ch[0]), (ch[1], b)):
             if u1 - u0 > 0.01:
