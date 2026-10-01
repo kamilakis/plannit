@@ -119,7 +119,7 @@ EOF
 
 # on our own host the pages live next door, not on claude.ai (project.conf ARTIFACTS: id=page)
 export PLANNIT_ARTIFACTS="$ARTIFACTS"                # page-variants.py rewrites the same links
-artifact_url() { local a; for a in $ARTIFACTS; do [ "${a#*=}" = "$1" ] && echo "https://claude.ai/artifact/${a%%=*}"; done; }
+artifact_url() { local a; for a in $ARTIFACTS; do [ "${a#*=}" = "$1" ] && echo "https://claude.ai/artifact/${a%%=*}"; done; true; }
 linkfix() { local a args=(); for a in $ARTIFACTS; do args+=(-e "s#https://claude.ai/artifact/${a%%=*}#../${a#*=}#g"); done
   [ ${#args[@]} -eq 0 ] || sed -i "${args[@]}" "$1"; }
 

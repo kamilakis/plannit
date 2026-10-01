@@ -27,7 +27,7 @@ BUILT="$PROJ/build-site/viewer/artifact.html"              # written by site/pub
 GLBS="$PROJ/out/renders"
 ART_ROOT="$HOME/$ARTIFACT_VIEWER_ROOT"                    # the path the artifact was first published from
 SRC="$ART_ROOT/index.html"
-URL=$(for a in $ARTIFACTS; do [ "${a#*=}" = viewer/ ] && echo "https://claude.ai/artifact/${a%%=*}"; done)   # viewer artifact the site links to
+URL=$(for a in $ARTIFACTS; do [ "${a#*=}" = viewer/ ] && echo "https://claude.ai/artifact/${a%%=*}"; done; true)   # `true`: under set -e a last non-match killed the script silently   # viewer artifact the site links to
 LABEL="${2:-$(date '+%d %b') refresh}"
 
 [ -f "$BUILT" ] || { echo "!! $BUILT is missing — run ./publish.sh first" >&2; exit 1; }
