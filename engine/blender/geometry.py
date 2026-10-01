@@ -72,7 +72,7 @@ def wall(x0, x1, z0, z1, openings=(), m='wall', tag='old', new_openings=()):
     for a, b, sill, head, kind in sorted(openings):
         piece(u, a, 0, CEIL)
         piece(a, b, 0, sill); piece(a, b, head, CEIL)
-        if kind in ('window', 'glazed'): window_frame(along_x, a, b, (z0 + z1) / 2 if along_x else (x0 + x1) / 2, sill, head)
+        if kind in ('window', 'glazed', 'sliding'): window_frame(along_x, a, b, (z0 + z1) / 2 if along_x else (x0 + x1) / 2, sill, head)
         OPENINGS.append((x0, x1, z0, z1, along_x, a, b, sill, head, kind, tag == 'new' or a in new_openings, tag))
         u = b
     piece(u, hi, 0, CEIL)

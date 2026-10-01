@@ -136,6 +136,13 @@ class Sheet:
                 if spec:
                     if outer_room is not None: s.tag(off(mid, h2 + 0.28, nout), a, b, w, head, None)
                     else: s.tag(off(mid, max(r for *_, r in leaves) + h2 + 0.23, nin), a, b, w, head, None)
+            elif kind == 'sliding':  # glazed sliding door: jambs, two overlapping glass leaves, tagged like a door
+                ext = lambda p, q, f: (p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f)
+                s.line('DOORS', off(a, -h2), off(a, h2)); s.line('DOORS', off(b, -h2), off(b, h2))
+                for p0, p1, d in ((a, ext(a, b, 0.55), -0.03), (ext(a, b, 0.45), b, 0.03)):
+                    s.line('DOORS', off(p0, d - 0.012), off(p1, d - 0.012)); s.line('DOORS', off(p0, d + 0.012), off(p1, d + 0.012))
+                    s.line('DOORS', off(p0, d - 0.012), off(p0, d + 0.012)); s.line('DOORS', off(p1, d - 0.012), off(p1, d + 0.012))
+                if spec: s.tag(off(mid, h2 + 0.28, nout if outer_room is not None else nin), a, b, w, head, None)
             else:  # closet opening / sliding fronts: two overlapping leaves
                 ext = lambda p, q, f: (p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f)
                 s.line('CLOSETS', off(a, -0.02), off(ext(a, b, 0.55), -0.02)); s.line('CLOSETS', off(ext(a, b, 0.45), 0.02), off(b, 0.02))
