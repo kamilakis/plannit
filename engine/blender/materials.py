@@ -48,16 +48,17 @@ def glass():
     nt.links.new(t.outputs[0], mix.inputs[1]); nt.links.new(g.outputs[0], mix.inputs[2])
     nt.links.new(mix.outputs[0], o.inputs[0]); M['glass'] = m
 
-def glass_matte():
+def glass_matte(name='glass_matte', color='#e9eeee', rough=0.42):
     """Frosted screen: still transmits daylight, but rough enough to scatter it, so what is behind
-    reads as a blur. Its own material on purpose — 'glass' is shared with every window in the flat."""
-    m = bpy.data.materials.new('glass_matte'); m.use_nodes = True
+    reads as a blur. Its own material on purpose — 'glass' is shared with every window in the flat.
+    Another name/colour makes a variant, e.g. a dark smoked privacy screen."""
+    m = bpy.data.materials.new(name); m.use_nodes = True
     b = m.node_tree.nodes['Principled BSDF']
-    b.inputs['Base Color'].default_value = (*srgb('#e9eeee'), 1)
-    b.inputs['Roughness'].default_value = 0.42
+    b.inputs['Base Color'].default_value = (*srgb(color), 1)
+    b.inputs['Roughness'].default_value = rough
     b.inputs['Transmission Weight'].default_value = 1.0
     b.inputs['IOR'].default_value = 1.45
-    M['glass_matte'] = m
+    M[name] = m; return m
 
 def planks(name, c1, c2, width=1.9, row=0.19, rough=0.4):
     if name in PAL_PLANKS: c1, c2 = PAL_PLANKS[name]
