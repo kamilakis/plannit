@@ -1,8 +1,9 @@
-"""Parametric furniture: chairs, speakers, framed art, a library bookcase, beds."""
+"""Parametric furniture: chairs, speakers, framed art, a library bookcase, beds, an outdoor lounge chair."""
 import math
+import bpy
 from .ctx import CEIL
-from .geometry import box, cyl, disc, rbox
-from .materials import BOOKC
+from .geometry import box, cyl, disc, rbox, link
+from .materials import BOOKC, M
 
 def counter_chair(cx, cz, face='S'):     # face: 'S' = faces south (sits on the north side), 'W' = faces west
     box(cx - 0.21, cx + 0.21, cz - 0.21, cz + 0.21, 0.63, 0.67, 'oak', 0.01, name='cseat')
@@ -101,3 +102,34 @@ def bed(x0, x1, z0, z1, head, cover):     # head: 'W' | 'N'
     else:
         box(x0 + 0.01, x1 - 0.01, z0 + 0.55, z1 - 0.02, 0.50, 0.56, cover, 0.04, 4, name='duvet')
         for xx in (x0 + 0.1, (x0 + x1) / 2 + 0.02): box(xx, xx + (x1 - x0) / 2 - 0.12, z0 + 0.08, z0 + 0.45, 0.52, 0.66, 'linen', 0.06, 4, name='pillow')
+
+
+def _slab(cx, cz, h, w, t, l, face, tilt, m, name):
+    """A w x t x l slab (side x forward x up) centred at plan (cx, cz, h), leaned back by `tilt` radians and
+    turned to face plan direction `face` = (fx, fz)."""
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(cx, -cz, h))
+    o = bpy.context.active_object; o.name = name; o.scale = (w, t, l)
+    o.rotation_euler = (tilt, 0, math.atan2(-face[0], -face[1]))
+    for c in o.users_collection: c.objects.unlink(o)
+    o.data.materials.append(M[m]); link(o)
+    b = o.modifiers.new('bev', 'BEVEL'); b.width = min(0.02, t / 3); b.segments = 3
+    return o
+
+def lounge_chair(cx, cz, face, frame='oak_dark', cushion='linen', w=0.66, d=0.82):
+    """A low, laid-back veranda chair: slatted frame, seat cushion, arms, a back reclined ~28 deg.
+    (cx, cz) = the seat's centre; face = the direction the sitter looks, (fx, fz) along x or z."""
+    # low enough (back top ~0.88) to survive every section cut, so no cut test here
+    fx, fz = face; sx, sz = -fz, fx                                  # the sitter's left-right axis
+    def bx(f0, f1, s0, s1, h0, h1, m, bev=0.0, name='lounge'):
+        xs = sorted((cx + fx * f0 + sx * s0, cx + fx * f1 + sx * s1)); zs = sorted((cz + fz * f0 + sz * s0, cz + fz * f1 + sz * s1))
+        box(xs[0], xs[1], zs[0], zs[1], h0, h1, m, bev, name=name)
+    for f0 in (-d / 2 + 0.02, d / 2 - 0.06):                          # legs
+        for s0 in (-w / 2 + 0.02, w / 2 - 0.06): bx(f0, f0 + 0.04, s0, s0 + 0.04, 0.0, 0.20, frame)
+    bx(-d / 2, d / 2, -w / 2, w / 2, 0.20, 0.26, frame, 0.01, 'lounge_frame')
+    bx(-d / 2 + 0.06, d / 2 - 0.02, -w / 2 + 0.06, w / 2 - 0.06, 0.26, 0.36, cushion, 0.03, 'lounge_seat')
+    for s0 in (-w / 2, w / 2 - 0.05): bx(-d / 2, d / 2 - 0.10, s0, s0 + 0.05, 0.26, 0.52, frame, 0.01, 'lounge_arm')
+    tilt, bl = math.radians(28), 0.66                                 # the back: leaned back, its foot at the rear
+    rx, rz = cx - fx * (d / 2 - 0.04), cz - fz * (d / 2 - 0.04)
+    off = math.sin(tilt) * bl / 2
+    _slab(rx - fx * off, rz - fz * off, 0.30 + math.cos(tilt) * bl / 2, w, 0.05, bl, face, tilt, frame, 'lounge_back')
+    _slab(rx - fx * (off - 0.06), rz - fz * (off - 0.06), 0.34 + math.cos(tilt) * (bl - 0.06) / 2, w - 0.12, 0.09, bl - 0.08, face, tilt, cushion, 'lounge_cushion')
