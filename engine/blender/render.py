@@ -52,8 +52,10 @@ def settings():
     return cy
 
 
-def camera(name, pos, tgt, lens=20, exposure=0.0, ortho=None, res=None, topdown=False):
-    """topdown: looks straight down, unrotated (a plan view), instead of aiming at tgt."""
+def camera(name, pos, tgt, lens=20, exposure=0.0, ortho=None, res=None, topdown=False, night_ev=0.0):
+    """topdown: looks straight down, unrotated (a plan view), instead of aiming at tgt.
+    night_ev: an exposure offset for this camera in the night renders only (e.g. darker small pale rooms)."""
+    if MODE == 'night': exposure += night_ev
     c = bpy.data.cameras.new(name); c.lens = lens; c.clip_start = 0.05
     if ortho: c.type = 'ORTHO'; c.ortho_scale = ortho
     o = link(bpy.data.objects.new(name, c))
