@@ -2,7 +2,7 @@
 import math
 import bpy
 from .ctx import CEIL
-from .geometry import box, cyl, disc, rbox, link
+from .geometry import box, cyl, disc, rbox, link, rod
 from .materials import BOOKC, M
 
 def counter_chair(cx, cz, face='S'):     # face: 'S' = faces south (sits on the north side), 'W' = faces west
@@ -133,3 +133,40 @@ def lounge_chair(cx, cz, face, frame='oak_dark', cushion='linen', w=0.66, d=0.82
     off = math.sin(tilt) * bl / 2
     _slab(rx - fx * off, rz - fz * off, 0.30 + math.cos(tilt) * bl / 2, w, 0.05, bl, face, tilt, frame, 'lounge_back')
     _slab(rx - fx * (off - 0.06), rz - fz * (off - 0.06), 0.34 + math.cos(tilt) * (bl - 0.06) / 2, w - 0.12, 0.09, bl - 0.08, face, tilt, cushion, 'lounge_cushion')
+
+
+def hanging_egg_chair(cx, cz, face, shell='rattan', stand='black', cushion='linen'):
+    """A hanging egg chair on a C-stand: an open-fronted basket of rattan ribs hung from a hook and spring,
+    seat and back cushions inside; the stand's post rises behind it and arcs over, its foot a C on the floor.
+    (cx, cz) = the basket's centre in plan; face = the way the opening looks, (fx, fz) along x or z."""
+    fx, fz = face; sx, sz = -fz, fx
+    A, B, C, H = 0.50, 0.44, 0.62, 0.98                    # half-width, half-depth, half-height, centre height
+    def P(u, v, w): return (cx + sx * u + fx * v, cz + sz * u + fz * v, H + w)   # side, forward, up -> plan point
+    def egg(t, p): return P(A * math.sin(t) * math.sin(p), B * math.sin(t) * math.cos(p), -C * math.cos(t))
+    N = 12                                                  # segments per meridian
+    for k in range(16):                                     # meridians; the front ones stop low (the opening)
+        p = 2 * math.pi * k / 16
+        top = math.pi if math.cos(p) < 0.35 else 1.15
+        ts = [top * i / N for i in range(N + 1)]
+        for t0, t1 in zip(ts, ts[1:]): rod(egg(t0, p), egg(t1, p), 0.008, shell)
+    for t in (0.45, 0.85, 1.15, 1.6, 2.1, 2.6):             # rings: full low down, the back arc higher up
+        ps = [2 * math.pi * i / 32 for i in range(33)]
+        for p0, p1 in zip(ps, ps[1:]):
+            if t > 1.2 and math.cos((p0 + p1) / 2) > 0.35: continue
+            rod(egg(t, p0), egg(t, p1), 0.009 if t != 1.15 else 0.014, shell)
+    # cushions: a seat in the bowl, a back leaning against the rear ribs
+    box(*sorted((P(-0.30, -0.22, 0)[0], P(0.30, 0.20, 0)[0])), *sorted((P(-0.30, -0.22, 0)[1], P(0.30, 0.20, 0)[1])),
+        H - 0.42, H - 0.30, cushion, 0.05, 4, name='egg_seat')
+    bx, bz, _ = P(0, -0.26, 0)
+    _slab(bx, bz, H + 0.02, 0.56, 0.12, 0.62, face, math.radians(12), cushion, 'egg_back')
+    # hook, spring, stand: the post behind, an arc over the top, a C-shaped foot on the floor
+    rod(P(0, 0, C - 0.02), P(0, 0, C + 0.16), 0.012, stand)
+    rod(P(0, 0, C + 0.16), P(0, 0, C + 0.30), 0.02, 'steel' if 'steel' in M else stand)
+    post = -0.78
+    rod(P(0, post, -H), P(0, post, C + 0.32), 0.03, stand)                       # the post, behind the basket
+    pts = [(post * math.cos(a), C + 0.32 + 0.15 * math.sin(a)) for a in [math.pi / 2 * i / 8 for i in range(9)]]
+    for (v0, w0), (v1, w1) in zip(pts, pts[1:]): rod(P(0, v0, w0), P(0, v1, w1), 0.03, stand)   # arcs over the top
+    rod(P(0, 0, C + 0.47), P(0, 0, C + 0.30), 0.012, stand)                      # down to the spring
+    R = 0.55                                                                     # the foot: a C, open to the front
+    ring = [(R * math.sin(a), post + R - R * math.cos(a)) for a in [math.radians(-135 + 270 * i / 18) for i in range(19)]]
+    for (u0, v0), (u1, v1) in zip(ring, ring[1:]): rod(P(u0, v0, -H + 0.02), P(u1, v1, -H + 0.02), 0.025, stand)
