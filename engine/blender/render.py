@@ -149,7 +149,7 @@ def run(views):
     if MODE == 'glb': export_glb()
     if MODE == 'svg': model_dump()
     CAMERAS = {k: {n: camera(n, **v) for n, v in vs.items()} for k, vs in views.CAMERAS.items()}['interior' if MODE == 'night' else MODE]
-    NIGHT_EV = float(os.environ.get('NIGHT_EV', -1.0))
+    NIGHT_EV = float(os.environ.get('NIGHT_EV', getattr(views, 'NIGHT_EV', -1.0)))   # env, else the project's views, else -1
     os.makedirs(OUT, exist_ok=True)
     # ---- render only what changed (2026-09-25). Each image gets a fingerprint of everything that can show
     # up in it: the objects in (or just around) that camera's view — geometry, placement, materials — plus

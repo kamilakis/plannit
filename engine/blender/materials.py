@@ -1,7 +1,7 @@
 """Materials: the named library every model builds from, palettes applied by name (ctx.PAL).
 mat() makes a Principled material; glass(), glass_matte() and planks() are node networks."""
 import bpy
-from .ctx import PAL, PAL_PLANKS
+from .ctx import PAL, PAL_PLANKS, MODE, NIGHT_LIGHTS
 
 M = {}
 PLANK_TONES = {}     # name -> the two sRGB tones a planks() material is built from (see the glb mode)
@@ -129,3 +129,6 @@ def library():
     glass_matte()
     planks('floor_oak', '#c9a47a', '#bf9a6f')
     planks('slats', '#b98c5f', '#b3875a', width=4.0, row=0.06)
+    if MODE == 'night' and NIGHT_LIGHTS == 'tagged':      # a sleeping flat: the luminaires' own glow goes out too
+        for n in ('downlight', 'led_soft', 'led_warm', 'led_dim', 'bulb'):
+            if n in M: M[n].node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = 0.0
