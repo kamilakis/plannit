@@ -105,6 +105,22 @@ def sliding_door(along_x, a, b, c, sill, head, t=0.05, track=0.07):
         fb(p0, p0 + w, d - 0.02, d + 0.02, sill + 0.02, sill + 0.02 + t); fb(p0, p0 + w, d - 0.02, d + 0.02, head - 2 * t, head - t)
         fb(p0 + t, p0 + w - t, d - 0.004, d + 0.004, sill + 0.02 + t, head - 2 * t, 'glass', 'glass')
 
+def image_panel(along_x, a, b, c, h0, h1, f, m, name='screen'):
+    """A flat rectangle that shows material m's image upright and unmirrored. It spans a..b along plan x
+    (along_x) or plan z, at c on the other plan axis, from h0 to h1, facing f = +1 / -1 along that other axis.
+    Its UVs run 0..1 across it with u to the viewer's right (a box's UVs do not)."""
+    if MODE in ('cutaway', 'plan', 'glb') and h0 >= CUT - 0.2: return None
+    if along_x:                      # Blender Y = -plan z; facing plan +z means the normal is Blender -Y
+        x0, x1 = (a, b) if f > 0 else (b, a)
+        v = [(x0, -c, h0), (x1, -c, h0), (x1, -c, h1), (x0, -c, h1)]
+    else:                            # spans plan z: Blender Y from -b to -a; facing plan +x means normal +X
+        y0, y1 = (-b, -a) if f > 0 else (-a, -b)
+        v = [(c, y0, h0), (c, y1, h0), (c, y1, h1), (c, y0, h1)]
+    me = bpy.data.meshes.new(name); me.from_pydata(v, [], [(0, 1, 2, 3)])
+    uv = me.uv_layers.new(name='UVMap')
+    for li, (uu, vv) in enumerate(((0, 0), (1, 0), (1, 1), (0, 1))): uv.data[li].uv = (uu, vv)
+    me.materials.append(M[m]); return link(bpy.data.objects.new(name, me))
+
 def rod(p0, p1, r=0.02, m='black'):
     a = Vector((p0[0], -p0[1], p0[2])); b = Vector((p1[0], -p1[1], p1[2])); d = b - a
     if MODE in ('cutaway', 'plan', 'glb') and min(a.z, b.z) >= CUT - 0.2: return

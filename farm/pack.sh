@@ -26,6 +26,7 @@ for f in "$PROJ"/*.py "$PROJ"/*.json "$PROJ"/FORCE "$PROJ"/HASHDEBUG; do
   [ -f "$f" ] && cp -a "$f" "$JOB/project/"
 done
 [ -f "$PROJ/out/render-hashes.json" ] && cp -a "$PROJ/out/render-hashes.json" "$JOB/project/out/"
+[ -d "$PROJ/assets" ] && cp -a "$PROJ/assets" "$JOB/project/"   # files the scene loads (images for image_mat)
 
 cat > "$JOB/scene.py" <<'EOF'
 # Render-farm entry, written by farm/pack.sh: builds <this dir>/project with <this dir>/engine.

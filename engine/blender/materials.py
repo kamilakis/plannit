@@ -18,6 +18,20 @@ def mat(name, color, rough=0.6, metal=0.0, sheen=0.0, coat=0.0, emit=None, estr=
         b.inputs['Emission Color'].default_value = (*emit, 1); b.inputs['Emission Strength'].default_value = estr
     M[name] = m; return m
 
+def image_mat(name, path, strength=1.0):
+    """A self-lit picture: an image file (relative to the project folder, e.g. 'assets/tv/show.png') through an
+    Emission shader. For TV screens and the like — it shows its picture instead of reflecting the room, and a
+    lit screen costs the renderer less than a glossy black one. Pair it with geometry.image_panel()."""
+    import os
+    from . import ctx
+    m = bpy.data.materials.new(name); m.use_nodes = True
+    nt = m.node_tree; nt.nodes.clear()
+    o = nt.nodes.new('ShaderNodeOutputMaterial'); e = nt.nodes.new('ShaderNodeEmission'); t = nt.nodes.new('ShaderNodeTexImage')
+    t.image = bpy.data.images.load(os.path.join(ctx.PROJECT, path), check_existing=True)
+    nt.links.new(t.outputs['Color'], e.inputs['Color']); e.inputs['Strength'].default_value = strength
+    nt.links.new(e.outputs['Emission'], o.inputs['Surface'])
+    M[name] = m; return m
+
 def srgb(h):
     c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
     return tuple(x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c)
