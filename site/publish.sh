@@ -101,13 +101,19 @@ fi
 
 # ------------------------------------------------------------------ build
 rm -rf "$STAGE"; mkdir -p "$STAGE"/{renders,drawings,cad}
-# Every page step below runs only if the project has that page: PLAYBOOK.md (the site's index),
-# content/presentation, content/viewer-3d, content/measure-form. The sheets are named in project.conf.
+# Every page step below runs only if the project has that page: PLAYBOOK.md, content/presentation,
+# content/viewer-3d, content/measure-form, options/. The sheets are named in project.conf.
+# project.conf SITE_HOME picks the page served at the site root: 'playbook' (default - the playbook IS the
+# root index) or 'presentation' (the root redirects to /presentation/ and the playbook moves to /playbook/).
+: "${SITE_HOME:=playbook}"
+case "$SITE_HOME" in playbook|presentation) ;; *) echo "!! project.conf SITE_HOME must be playbook or presentation" >&2; exit 1 ;; esac
+PB_DIR="$STAGE"; PB_REL=""; [ "$SITE_HOME" = presentation ] && { PB_DIR="$STAGE/playbook"; PB_REL="playbook/"; }
 
 if [ -f "$PROJ/PLAYBOOK.md" ]; then
-echo "== playbook"
-python3 "$SITE/md2html.py" "$PROJ/PLAYBOOK.md" "$STAGE/index.html" "$PLAYBOOK_TITLE"
-cp "$PROJ/PLAYBOOK.md" "$STAGE/playbook.md"
+echo "== playbook${PB_REL:+ (at /$PB_REL)}"
+mkdir -p "$PB_DIR"
+python3 "$SITE/md2html.py" "$PROJ/PLAYBOOK.md" "$PB_DIR/index.html" "$PLAYBOOK_TITLE"
+cp "$PROJ/PLAYBOOK.md" "$PB_DIR/playbook.md"
 fi
 for f in $SITE_EXTRA; do cp "$PROJ/$f" "$STAGE/" 2>/dev/null || true; done
 
@@ -214,6 +220,20 @@ cat >> "$STAGE/measure/index.html" <<EOF
 EOF
 fi
 
+if [ -d "$PROJ/options" ]; then
+echo "== options (design alternatives: sketches + INDEX.md)"
+mkdir -p "$STAGE/options"
+cp -a "$PROJ/options/." "$STAGE/options/"
+[ -f "$PROJ/options/INDEX.md" ] && python3 "$SITE/md2html.py" "$PROJ/options/INDEX.md" "$STAGE/options/index.html" "${NAME:-} - options"
+fi
+if [ "$SITE_HOME" = presentation ] && [ -d "$PRES" ]; then
+cat > "$STAGE/index.html" <<EOF
+<!doctype html><meta charset="utf-8"><title>${NAME:-site}</title>
+<meta http-equiv="refresh" content="0; url=presentation/">
+<link rel="canonical" href="presentation/">
+<p><a href="presentation/">${NAME:-site}</a> &middot; <a href="playbook/">playbook</a></p>
+EOF
+fi
 echo "== renders / drawings / cad"
 cp -f "$FINAL"/*.jpg "$STAGE/renders/" 2>/dev/null || true
 for f in "$RENDERS"/*.png "$RENDERS"/*.svg; do
@@ -258,8 +278,14 @@ RSYNC=(rsync -rlt --delete --human-readable)
 
 echo
 echo "published:"
+if [ "$SITE_HOME" = presentation ]; then
+echo "  $SITE_URL/                -> presentation/ (the site's home page)"
+echo "  $SITE_URL/playbook/       playbook"
+else
 echo "  $SITE_URL/                playbook"
+fi
 echo "  $SITE_URL/presentation/   renders page"
+[ -d "$STAGE/options" ] && echo "  $SITE_URL/options/        design alternatives (sketches)"
 [ -n "$PREVIEW_REL" ] && echo "  $SITE_URL/$PREVIEW_REL/   preview: not live on the presentation page yet"
 echo "  $SITE_URL/viewer/         3D viewer"
 echo "  $SITE_URL/viewer/artifact.html   the filled page to paste into the Artifact"
