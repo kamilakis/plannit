@@ -10,6 +10,7 @@
 #     name    job name                                     (default: project / directory name)
 #   render-submit --status          show the queue
 #   render-submit --wake            only send wake-on-LAN to debof
+#   env NOWAKE=1                    queue without waking debof: the watcher picks the job up whenever it wakes
 #
 # A directory is copied whole (scene.py plus any assets; renders*/web/scene-history are skipped).
 # Machines, addresses and the queue path: ~/.config/plannit/farm.conf (or $PLANNIT_FARM_CONF), from
@@ -72,5 +73,5 @@ ${PCT:+PCT=$PCT}
 EOF
 mv "$Q/.staging/$JOB" "$Q/incoming/$JOB"      # atomic: the watcher never sees a half-copied job
 echo "queued $JOB"
-wake
+if [ -n "${NOWAKE:-}" ]; then echo "NOWAKE: debof not woken — the job waits in incoming/ until it is up"; else wake; fi
 echo "results will appear in $Q/done/$JOB/renders/"

@@ -92,13 +92,16 @@ def office_chair(cx, cz):     # faces north (toward the desk)
     box(cx - 0.23, cx + 0.23, cz + 0.20, cz + 0.26, 0.60, 1.10, 'speaker', 0.03, 4, name='chair_back')
     box(cx - 0.02, cx + 0.02, cz + 0.22, cz + 0.26, 0.44, 0.62, 'black', name='chair_spine')
 
-def bed(x0, x1, z0, z1, head, cover):     # head: 'W' | 'N'
+def bed(x0, x1, z0, z1, head, cover):     # head: 'W' (at x0) | 'N' (at z0) | 'S' (at z1)
     box(x0 + 0.05, x1 - 0.05, z0 + 0.05, z1 - 0.05, 0.0, 0.12, 'black', name='bed_base')
     box(x0, x1, z0, z1, 0.12, 0.30, 'oak', 0.01, name='bed_frame')
     box(x0 + 0.03, x1 - 0.03, z0 + 0.03, z1 - 0.03, 0.30, 0.52, 'linen', 0.05, 4, name='mattress')
     if head == 'W':
         box(x0 + 0.55, x1 - 0.02, z0 + 0.01, z1 - 0.01, 0.50, 0.56, cover, 0.04, 4, name='duvet')
         for zz in (z0 + 0.1, (z0 + z1) / 2 + 0.02): box(x0 + 0.08, x0 + 0.45, zz, zz + (z1 - z0) / 2 - 0.12, 0.52, 0.66, 'linen', 0.06, 4, name='pillow')
+    elif head == 'S':
+        box(x0 + 0.01, x1 - 0.01, z0 + 0.02, z1 - 0.55, 0.50, 0.56, cover, 0.04, 4, name='duvet')
+        for xx in (x0 + 0.1, (x0 + x1) / 2 + 0.02): box(xx, xx + (x1 - x0) / 2 - 0.12, z1 - 0.45, z1 - 0.08, 0.52, 0.66, 'linen', 0.06, 4, name='pillow')
     else:
         box(x0 + 0.01, x1 - 0.01, z0 + 0.55, z1 - 0.02, 0.50, 0.56, cover, 0.04, 4, name='duvet')
         for xx in (x0 + 0.1, (x0 + x1) / 2 + 0.02): box(xx, xx + (x1 - x0) / 2 - 0.12, z0 + 0.08, z0 + 0.45, 0.52, 0.66, 'linen', 0.06, 4, name='pillow')
