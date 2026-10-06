@@ -5,8 +5,9 @@ existing.py (the flat today), required: CEIL, WALLS {id: (x0, x1, z0, z1, …)},
   Optional (empty if absent): CLOSET_FRONTS, BEAMS, COLUMNS, FITTINGS.
 proposal.py (the renovation as changes), required: ROOMS. Optional: DEMOLISH, RESIZE, OPENING_CHANGES
   (id -> new (a, b, sill, head, kind) | None = bricked up | 'merged' = swallowed by a neighbour widened over it),
-  NEW_OPENINGS, NEW_WALLS, ASSUMED_HEAD (a head for each unmeasured opening that stays), CLOSET_FRONTS,
-  REMOVE_FITTINGS.
+  NEW_OPENINGS, NEW_WALLS, NEW_ARCS (curved new walls: {id: (cx, cz, r_in, r_out, a0, a1, note)}, a ring sector
+  round plan point (cx, cz), angles in degrees with 0 = +x and 90 = +z), ASSUMED_HEAD (a head for each unmeasured
+  opening that stays), CLOSET_FRONTS, REMOVE_FITTINGS.
 Frame: x, z metres; walls are axis-aligned rectangles; openings run along a wall's long axis.
 Stdlib only: imported as `model` by the sheet scripts, as `engine.model` in Blender."""
 
@@ -16,7 +17,7 @@ def defaults(X, P=None):
     for k in ('CLOSET_FRONTS', 'BEAMS', 'COLUMNS', 'FITTINGS'):
         if not hasattr(X, k): setattr(X, k, {})
     if P is not None:
-        for k in ('RESIZE', 'OPENING_CHANGES', 'NEW_OPENINGS', 'NEW_WALLS', 'ASSUMED_HEAD', 'CLOSET_FRONTS'):
+        for k in ('RESIZE', 'OPENING_CHANGES', 'NEW_OPENINGS', 'NEW_WALLS', 'NEW_ARCS', 'ASSUMED_HEAD', 'CLOSET_FRONTS'):
             if not hasattr(P, k): setattr(P, k, {})
         for k in ('DEMOLISH', 'REMOVE_FITTINGS'):
             if not hasattr(P, k): setattr(P, k, set())
@@ -77,3 +78,19 @@ def demolished(X, P):
             else:
                 for a, b in ((z0, r[2]), (r[3], z1)):
                     if b - a > 1e-4: yield wid, x0, x1, a, b
+
+
+def arc_points(cx, cz, r, a0, a1, n):
+    """n+1 plan points along a circle of radius r round (cx, cz), from angle a0 to a1 (degrees, 0 = +x, 90 = +z)."""
+    import math
+    return [(cx + r * math.cos(math.radians(a0 + (a1 - a0) * k / n)), cz + r * math.sin(math.radians(a0 + (a1 - a0) * k / n)))
+            for k in range(n + 1)]
+
+
+def arcs(P, n=24):
+    """Every curved new wall: (id, outline, quads) — outline = the closed ring-sector polygon, quads = n four-point
+    pieces of it (for a DXF SOLID, which takes four corners at most)."""
+    for aid, (cx, cz, ri, ro, a0, a1, *_n) in P.NEW_ARCS.items():
+        inner, outer = arc_points(cx, cz, ri, a0, a1, n), arc_points(cx, cz, ro, a0, a1, n)
+        quads = [[inner[k], inner[k + 1], outer[k + 1], outer[k]] for k in range(n)]
+        yield aid, outer + inner[::-1], quads

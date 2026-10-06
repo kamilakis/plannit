@@ -81,7 +81,7 @@ def bookcase(x0, x1, z0, z1, along_x, shelves=(0.0, 0.42, 0.80, 1.18, 1.56, 1.94
                 else: box(depth0 + 0.03, depth1 - 0.03, z0 + u, z0 + u + w, s + 0.08, s + 0.08 + h, c, name='book')
                 u += w + 0.002
 
-def office_chair(cx, cz):     # faces north (toward the desk)
+def office_chair(cx, cz, face='N'):     # face: the way the sitter looks — 'N' (-z, the default), 'S', 'W' (-x), 'E'
     for k in range(5):
         a = k * 2 * math.pi / 5
         x1, z1 = cx + 0.30 * math.cos(a), cz + 0.30 * math.sin(a)
@@ -89,8 +89,14 @@ def office_chair(cx, cz):     # faces north (toward the desk)
         cyl(x1, z1, 0.0, 0.06, 0.025, 'black', 12)
     cyl(cx, cz, 0.09, 0.44, 0.025, 'steel', 16)
     box(cx - 0.25, cx + 0.25, cz - 0.24, cz + 0.24, 0.44, 0.52, 'speaker', 0.03, 4, name='chair_seat')
-    box(cx - 0.23, cx + 0.23, cz + 0.20, cz + 0.26, 0.60, 1.10, 'speaker', 0.03, 4, name='chair_back')
-    box(cx - 0.02, cx + 0.02, cz + 0.22, cz + 0.26, 0.44, 0.62, 'black', name='chair_spine')
+    # the back sits behind the sitter: on +z for 'N' (as it always was), -z for 'S', +x for 'W', -x for 'E'
+    sgn = {'N': 1, 'S': -1, 'W': 1, 'E': -1}[face]
+    if face in ('N', 'S'):
+        box(cx - 0.23, cx + 0.23, *sorted((cz + sgn * 0.20, cz + sgn * 0.26)), 0.60, 1.10, 'speaker', 0.03, 4, name='chair_back')
+        box(cx - 0.02, cx + 0.02, *sorted((cz + sgn * 0.22, cz + sgn * 0.26)), 0.44, 0.62, 'black', name='chair_spine')
+    else:
+        box(*sorted((cx + sgn * 0.20, cx + sgn * 0.26)), cz - 0.23, cz + 0.23, 0.60, 1.10, 'speaker', 0.03, 4, name='chair_back')
+        box(*sorted((cx + sgn * 0.22, cx + sgn * 0.26)), cz - 0.02, cz + 0.02, 0.44, 0.62, 'black', name='chair_spine')
 
 def bed(x0, x1, z0, z1, head, cover):     # head: 'W' (at x0) | 'N' (at z0) | 'S' (at z1)
     box(x0 + 0.05, x1 - 0.05, z0 + 0.05, z1 - 0.05, 0.0, 0.12, 'black', name='bed_base')

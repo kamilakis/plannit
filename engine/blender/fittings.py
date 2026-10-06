@@ -3,7 +3,7 @@ master file, floors from the proposal's rooms, stair flights."""
 import math
 from mathutils import Vector
 from .ctx import MODE, CEIL
-from .geometry import box, wall, rod, floor
+from .geometry import box, wall, rod, floor, arc_wall
 from .. import model
 
 # Curtains. Depths are measured from the wall CENTRELINE, so everything must clear E/2 = 0.125 or it
@@ -78,6 +78,8 @@ def shell(X, PR):
     for _wid, x0, x1, z0, z1, _ops, _tag, _cut in model.walls(X, PR):
         wall(x0, x1, z0, z1, [(a, b, sl, hd, 'door' if k == 'closet' else k) for a, b, sl, hd, k in _ops],
              tag=_tag, new_openings=_cut)
+    for cx, cz, ri, ro, a0, a1, *_n in PR.NEW_ARCS.values():          # curved new walls, full height
+        arc_wall(cx, cz, ri, ro, a0, a1, 0.0, CEIL)
     # the concrete frame (measured 23 Sep): downstand beams and columns. Unsurveyed rooms may have more.
     for x0, x1, z0, z1, soffit, _src in X.BEAMS.values(): box(x0, x1, z0, z1, soffit, CEIL, 'wall', name='beam')
     for x0, x1, z0, z1, _src in X.COLUMNS.values(): box(x0, x1, z0, z1, 0.0, CEIL, 'wall', name='column')

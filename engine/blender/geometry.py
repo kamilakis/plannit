@@ -78,6 +78,32 @@ def wall(x0, x1, z0, z1, openings=(), m='wall', tag='old', new_openings=()):
         u = b
     piece(u, hi, 0, CEIL)
 
+def arc_wall(cx, cz, ri, ro, a0, a1, h0, h1, m='wall', n=24, name='wall_arc'):
+    """A curved wall: the ring sector round plan point (cx, cz) between radii ri and ro, angles a0..a1 (degrees,
+    0 = +x, 90 = +z), from h0 to h1, as ONE smooth mesh (n segments, smooth-shaded sides). The model dump records
+    its bounding box under `name`, which is not 'wall', so box-based clash checks do not treat the hollow as solid."""
+    if MODE in ('cutaway', 'plan', 'glb') and h0 >= CUT - 0.2: return None
+    h1 = min(h1, CUT)
+    pts = lambda r: [(cx + r * math.cos(math.radians(a0 + (a1 - a0) * k / n)), cz + r * math.sin(math.radians(a0 + (a1 - a0) * k / n))) for k in range(n + 1)]
+    inner, outer = pts(ri), pts(ro)
+    xs = [p[0] for p in inner + outer]; zs = [p[1] for p in inner + outer]
+    SHAPES.append((name, min(xs), max(xs), min(zs), max(zs), h0, h1, m if isinstance(m, str) else m.name))
+    # every part its own vertices, so the smooth curved faces do not average normals with the flat caps
+    v, f, smooth = [], [], []
+    def add(pts3, faces, sm):
+        b = len(v); v.extend(pts3); f.extend(tuple(b + q for q in fc) for fc in faces); smooth.extend([sm] * len(faces))
+    for side in (outer, inner):                                      # the two curved faces
+        add([(x, -z, h0) for x, z in side] + [(x, -z, h1) for x, z in side], [(k, k + 1, n + 2 + k, n + 1 + k) for k in range(n)], True)
+    ring = outer + inner[::-1]; N = len(ring)
+    add([(x, -z, h0) for x, z in ring], [tuple(range(N - 1, -1, -1))], False)         # bottom
+    add([(x, -z, h1) for x, z in ring], [tuple(range(N))], False)                     # top
+    for a, b in ((outer[0], inner[0]), (outer[-1], inner[-1])):                       # the two flat ends
+        add([(a[0], -a[1], h0), (b[0], -b[1], h0), (b[0], -b[1], h1), (a[0], -a[1], h1)], [(0, 1, 2, 3)], False)
+    me = bpy.data.meshes.new(name); me.from_pydata(v, [], f); me.materials.append(M[m] if isinstance(m, str) else m)
+    for poly, sm in zip(me.polygons, smooth): poly.use_smooth = sm
+    return link(bpy.data.objects.new(name, me))
+
+
 def window_frame(along_x, a, b, c, sill, head, t=0.05, d=0.06):
     def fb(a0, a1, h0, h1, m='frame'):
         if along_x: box(a0, a1, c - d / 2, c + d / 2, h0, h1, m, name='frame')

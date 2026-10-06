@@ -52,6 +52,9 @@ def base():
             u0, u1 = max(u0, lo), min(u1, hi)
             if u1 - u0 > 0.01:
                 q = rect(u0, u1, z0, z1) if ax else rect(x0, x1, u0, u1); sh.solid('NEW_WALLS', q); sh.pline('WALLS', q); sh.solids.append(q)
+    for _aid, outline, quads in model.arcs(PR):                       # curved new walls: filled like new walls, outlined
+        for q in quads: sh.solid('NEW_WALLS', q)
+        sh.pline('WALLS', outline)
     sh.columns([c[:4] for c in X.COLUMNS.values()])
     sh.openings(opens)
     sh.beams([b[:5] for b in X.BEAMS.values()])
