@@ -3,7 +3,8 @@
 #
 # Queue on debnuc (~/render-queue):
 #   incoming/<job>/   submitted jobs: a Blender script + job.conf (+ any assets)
-#   running/<job>/    claimed by this watcher (moved atomically)
+#   running/<job>/    claimed by this watcher (moved atomically); while it renders, renders/ and render.log are
+#                     copied back here every RENDER_SHIP seconds (default 30), so finished images show up as they land
 #   done/<job>/       finished: job files + renders/ + render.log + STATUS
 #   failed/<job>/     same layout, STATUS says why
 #
@@ -20,6 +21,7 @@ set -uo pipefail
 REMOTE="${RENDER_REMOTE:-nuc}"                 # ssh alias for debnuc
 QUEUE="${RENDER_QUEUE:-render-queue}"          # relative to the remote home
 POLL="${RENDER_POLL:-20}"                      # seconds between checks
+SHIP="${RENDER_SHIP:-30}"                      # seconds between progress copies of a running job (0 = off)
 WORK="${RENDER_WORK:-$HOME/.cache/render-watch}"
 BVER=4.5.14; BDIR="$HOME/.cache/blender/blender-$BVER-linux-x64"; B="$BDIR/blender"
 
@@ -84,11 +86,24 @@ run_job(){ # job name
   elif ! ensure_blender >> "$log" 2>&1; then
     status="failed: blender download"
   else
+    # progress copies: every finished image (and the log) goes back to running/<job>/ while the job runs. Stopped
+    # by a flag and WAITED for before the job is moved to done/ — an rsync still in flight after the mv would
+    # recreate running/<job>/, and the next watcher start would queue that leftover again.
+    local shipper=""
+    if [ "$SHIP" -gt 0 ] 2>/dev/null; then
+      rm -f "$jd/.ship-stop"
+      ( while [ ! -f "$jd/.ship-stop" ]; do
+          rsync -a --exclude '*.tmp' -e "ssh ${SSHO[*]}" "$jd/renders" "$jd/render.log" "$REMOTE:$QUEUE/running/$job/" >/dev/null 2>&1
+          for _ in $(seq "$SHIP"); do [ -f "$jd/.ship-stop" ] && break; sleep 1; done
+        done ) &
+      shipper=$!
+    fi
     local p
     for p in $PASSES; do
       say "$job: ${p%%:*} ${p#*:}"
       render_pass "$jd" "$SCENE" "${p%%:*}" "${p#*:}" "$PCT" "$SPP" "$log" || status="failed: pass $p"
     done
+    if [ -n "$shipper" ]; then touch "$jd/.ship-stop"; wait "$shipper" 2>/dev/null; rm -f "$jd/.ship-stop"; fi
   fi
   echo "finished $(date '+%F %T') in $(( SECONDS - t0 )) s — $status" >> "$log"
   echo "$status" > "$jd/STATUS"

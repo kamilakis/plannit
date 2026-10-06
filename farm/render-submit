@@ -38,6 +38,9 @@ status(){
   for d in incoming running done failed; do
     printf '%-9s' "$d:"; ls -1tr "$Q/$d" 2>/dev/null | tail -8 | tr '\n' ' '; echo
   done
+  for j in "$Q"/running/*/; do                    # progress: images the watcher has copied back so far
+    [ -d "$j/renders" ] && echo "  $(basename "$j"): $(ls "$j/renders" 2>/dev/null | grep -c '\.jpg$') images so far, last: $(ls -t "$j/renders" 2>/dev/null | head -1)"
+  done
   ping -c1 -W1 "$DEBOF_IP" >/dev/null 2>&1 && echo "debof: up" || echo "debof: down"
 }
 

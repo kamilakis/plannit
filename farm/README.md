@@ -7,7 +7,7 @@ box) and *debof* (renders) — the names of the first farm this ran on.
 
     ~/render-queue/                 on the queueing box
       incoming/<job>/   ← render-submit puts jobs here (copied in via .staging, then mv, so jobs are never half-written)
-      running/<job>/    ← claimed by the render box
+      running/<job>/    ← claimed by the render box; finished images are copied back into renders/ every 30 s (RENDER_SHIP)
       done/<job>/       ← job files + renders/ + render.log + STATUS ("ok")
       failed/<job>/     ← same, STATUS says why
 
