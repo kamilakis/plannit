@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""site/feedback/feedback-pull: bring a plannit site's visitor notes home (spec: the project's FEEDBACK-SPEC.md).
+
+  feedback-pull <project>             fetch new notes from the server into FEEDBACK_INBOX, one Matrix message each,
+                                      and send the ids marked spam/test back so the public counts leave them out
+  feedback-pull <project> --list      print the open notes (status new or working): what a session reads first
+  feedback-pull <project> --install   install and start the systemd --user timer (every FEEDBACK_POLL)
+
+Settings come from <project>/project.conf: SITE_HOST, SITE_URL, FEEDBACK_STORE, FEEDBACK_INBOX, FEEDBACK_MATRIX,
+FEEDBACK_POLL. The inbox is JSON lines, one note per line, the server's fields plus:
+  status   new | working | done | answered | wontfix | spam | test
+  notified true once the Matrix message went out (retried on the next run until it does)
+  outcome  free text: the commit and render job, the answer, or the reason
+Sessions edit status/outcome by hand; this script only appends notes and sets `notified`.
+"""
+import fcntl, json, os, shlex, subprocess, sys
+
+OPEN = ('new', 'working')
+HIDDEN = ('spam', 'test')
+
+
+def conf(proj):
+    out = subprocess.run(['bash', '-c', 'set -a; . ./project.conf; env -0'], cwd=proj, capture_output=True, check=True).stdout
+    return dict(kv.split('=', 1) for kv in out.decode().split('\0') if '=' in kv)
+
+
+def load(path):
+    if not os.path.exists(path): return []
+    with open(path, encoding='utf-8') as f: return [json.loads(l) for l in f if l.strip()]
+
+
+def save(path, notes):
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        for n in notes: f.write(json.dumps(n, ensure_ascii=False) + '\n')
+    os.replace(tmp, path)
+
+
+def link(c, n):
+    page = n.get('page') or '/'
+    return c['SITE_URL'] + (page.rsplit('/', 1)[0] + '/' + n['image'] if n.get('image') else page)
+
+
+def message(c, n):
+    where = n['image'] or f"general, {n.get('page') or '/'}"
+    pin = f" · pin {n['pin'][0]:.2f},{n['pin'][1]:.2f}" if n.get('pin') else ''
+    who = f" — {n['name']}" if n.get('name') else ''
+    return (f"💬 New note on {c.get('NAME', 'the site')}: {where}{pin}{who}\n{n['text']}\n{link(c, n)}\n"
+            f"(id {n['id']}; nothing is changed until you say so)")
+
+
+def pull(proj, c):
+    host, store = c['SITE_HOST'], c['FEEDBACK_STORE']
+    inbox = os.path.join(proj, c.get('FEEDBACK_INBOX', 'feedback/inbox.jsonl'))
+    os.makedirs(os.path.dirname(inbox), exist_ok=True)
+    r = subprocess.run(['ssh', '-o', 'BatchMode=yes', host, f'cat {shlex.quote(store)}/feedback.jsonl 2>/dev/null; true'],
+                       capture_output=True, timeout=60)
+    if r.returncode: sys.exit(f'feedback-pull: ssh {host} failed: {r.stderr.decode().strip()}')
+    remote = [json.loads(l) for l in r.stdout.decode().splitlines() if l.strip()]
+    with open(inbox + '.lock', 'w') as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        notes = load(inbox)
+        have = {n['id'] for n in notes}
+        new = [dict(n, status='new', notified=False) for n in remote if n['id'] not in have]
+        notes += new
+        env = dict(os.environ, AGENT_MATRIX_CONFIG=os.path.expanduser(c.get('FEEDBACK_MATRIX', '')))
+        for n in notes:
+            if n.get('notified') is False and c.get('FEEDBACK_MATRIX'):
+                ok = subprocess.run([os.path.expanduser('~/.local/bin/matrix-notify'), message(c, n)], env=env,
+                                    capture_output=True, timeout=60).returncode == 0
+                if ok: n['notified'] = True
+                else: print(f'feedback-pull: matrix-notify failed for {n["id"]}, will retry', file=sys.stderr)
+        save(inbox, notes)
+    # spam and test notes: the server leaves them out of the public counts
+    hidden = ''.join(n['id'] + '\n' for n in notes if n.get('status') in HIDDEN)
+    subprocess.run(['ssh', '-o', 'BatchMode=yes', host,
+                    f'f={shlex.quote(store)}/hidden.txt; t="$f.new"; cat > "$t"; chmod 644 "$t"; '
+                    f'if cmp -s "$t" "$f" || {{ [ ! -e "$f" ] && [ ! -s "$t" ]; }}; then rm -f "$t"; else mv "$t" "$f"; fi'],
+                   input=hidden.encode(), check=False, timeout=60)
+    if new: print(f'feedback-pull: {len(new)} new note(s)')
+
+
+def listing(proj, c):
+    inbox = os.path.join(proj, c.get('FEEDBACK_INBOX', 'feedback/inbox.jsonl'))
+    notes = [n for n in load(inbox) if n.get('status') in OPEN]
+    print(f'{len(notes)} open note(s) in {os.path.relpath(inbox, proj)}')
+    for n in notes:
+        pin = f" pin {n['pin'][0]:.2f},{n['pin'][1]:.2f}" if n.get('pin') else ''
+        print(f"\n[{n['status']}] {n['id']}  {n['image'] or 'general ' + (n.get('page') or '/')}{pin}"
+              f"  (published {n.get('published') or '-'}){'  — ' + n['name'] if n.get('name') else ''}")
+        print('  ' + n['text'].replace('\n', '\n  '))
+
+
+def install(proj, c):
+    unit = os.path.expanduser('~/.config/systemd/user')
+    os.makedirs(unit, exist_ok=True)
+    name = 'feedback-pull-' + os.path.basename(proj.rstrip('/'))
+    me = os.path.abspath(__file__)
+    open(f'{unit}/{name}.service', 'w').write(
+        f'[Unit]\nDescription=plannit visitor notes: pull {proj}\n\n[Service]\nType=oneshot\n'
+        f'ExecStart={me} {proj}\n')
+    open(f'{unit}/{name}.timer', 'w').write(
+        f'[Unit]\nDescription=plannit visitor notes: pull {proj} every {c.get("FEEDBACK_POLL", "5min")}\n\n'
+        f'[Timer]\nOnBootSec=2min\nOnUnitActiveSec={c.get("FEEDBACK_POLL", "5min")}\nPersistent=true\n\n'
+        f'[Install]\nWantedBy=timers.target\n')
+    subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
+    subprocess.run(['systemctl', '--user', 'enable', '--now', f'{name}.timer'], check=True)
+    print(f'installed {unit}/{name}.timer')
+
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2 or sys.argv[1].startswith('-'): sys.exit(__doc__)
+    proj = os.path.abspath(sys.argv[1])
+    c = conf(proj)
+    if not c.get('FEEDBACK_STORE'): sys.exit('feedback-pull: project.conf has no FEEDBACK_STORE')
+    {'--list': listing, '--install': install}.get(sys.argv[2] if len(sys.argv) > 2 else '', pull)(proj, c)

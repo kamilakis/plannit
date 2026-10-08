@@ -1,0 +1,28 @@
+/* site/feedback/feedback.css: the visitor-notes widget. Uses the page's own tokens where it has them
+   (presentation: --paper/--oak, playbook: --panel/--accent), with plain fallbacks. */
+.fb-host{position:relative}
+.fb-btn{display:inline-flex; align-items:center; gap:4px; border:1px solid var(--rule,#ccc); background:var(--paper,var(--panel,#fff));
+  color:var(--ink,#222); border-radius:999px; padding:4px 11px; cursor:pointer; font:600 12px/1.2 var(--mono,monospace)}
+.fb-btn[aria-expanded="true"]{border-color:var(--oak,var(--accent,#a8784a)); color:var(--oak,var(--accent,#a8784a))}
+.fb-btn:focus-visible,.fb-form button:focus-visible{outline:2px solid var(--oak,var(--accent,#a8784a)); outline-offset:2px}
+.fb-n:empty{display:none}
+.fb-panel{margin:10px 10px 4px; padding:12px 14px; border:1px solid var(--rule,#ccc); border-radius:10px; background:var(--paper,var(--panel,#fff))}
+.fb-panel .fb-title{margin:0 0 4px; font:600 14px/1.3 var(--body,sans-serif)}
+.fb-hint{margin:0 0 10px; font-size:13px; color:var(--muted,#666)}
+.fb-pinning .fb-host, .fb-pinning .fb-host img{cursor:crosshair}
+.fb-pin{position:absolute; transform:translate(-50%,-50%); width:26px; height:26px; border-radius:50%; pointer-events:none;
+  background:var(--gone,#c0392b); color:#fff; border:2px solid #fff; box-shadow:0 1px 6px rgba(0,0,0,.45);
+  display:flex; align-items:center; justify-content:center; font:700 13px/1 var(--mono,monospace)}
+.fb-form{display:grid; gap:8px}
+.fb-form textarea,.fb-form input{width:100%; box-sizing:border-box; font:15px/1.4 var(--body,sans-serif); color:var(--ink,#222);
+  background:var(--ground,#fafafa); border:1px solid var(--rule,#ccc); border-radius:8px; padding:8px 10px}
+.fb-form textarea{resize:vertical; min-height:4.5em}
+.fb-form .fb-hp{position:absolute; left:-9999px; width:1px; height:1px; opacity:0}
+.fb-row{display:flex; flex-wrap:wrap; align-items:center; gap:10px}
+.fb-form button{border:0; border-radius:999px; padding:7px 16px; cursor:pointer; font:600 13px/1.2 var(--body,sans-serif)}
+.fb-send{background:var(--ink,#222); color:var(--ground,#fff)}
+.fb-send:disabled{opacity:.5; cursor:wait}
+.fb-cancel{background:none; color:var(--muted,#666)}
+.fb-status{font-size:13px; color:var(--muted,#666)}
+.fb-general{margin:40px 0 28px; padding:18px 20px; border:1px solid var(--rule,#ccc); border-radius:12px; background:var(--paper,var(--panel,#fff)); max-width:640px}
+.fb-general .fb-title{margin:0 0 4px; font:600 18px/1.3 var(--body,sans-serif)}

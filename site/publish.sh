@@ -267,6 +267,23 @@ if [ -d "$PROJ/tmp" ]; then
   done
 fi
 
+# Visitor notes (site/feedback, 8 Oct 2026): the 💬 widget on the pages project.conf FEEDBACK_PAGES names, and the one
+# PHP endpoint it posts to. Notes land on the server in FEEDBACK_STORE, outside the docroot; site/feedback/feedback-pull
+# brings them home. The server needs the nginx block in site/feedback/nginx.conf once.
+if [ -n "${FEEDBACK_STORE:-}" ]; then
+echo "== feedback widget (notes go to $HOST:$FEEDBACK_STORE)"
+mkdir -p "$STAGE/feedback"
+sed -e "s#@STORE@#$FEEDBACK_STORE#" -e "s#@DOCROOT@#$DOCROOT#" "$SITE/feedback/api.php" > "$STAGE/feedback/api.php"
+cp "$SITE/feedback/feedback.js" "$SITE/feedback/feedback.css" "$STAGE/feedback/"
+V=$(cat "$SITE/feedback/feedback.js" "$SITE/feedback/feedback.css" | md5sum | cut -c1-8)   # busts the browser cache on change
+for p in ${FEEDBACK_PAGES:-presentation playbook options}; do
+  if [ "$p" = playbook ]; then f="$PB_DIR/index.html"; else f="$STAGE/$p/index.html"; fi
+  [ -f "$f" ] || continue
+  printf '\n<link rel="stylesheet" href="/feedback/feedback.css?v=%s">\n<script src="/feedback/feedback.js?v=%s" data-api="/feedback/api.php" defer></script>\n' "$V" "$V" >> "$f"
+  echo "   ${f#$STAGE}"
+done
+fi
+
 echo "== built $(du -sh "$STAGE" | cut -f1) in $STAGE"
 [ "$LOCAL" = 1 ] && { echo "(--local: not pushing)"; exit 0; }
 
