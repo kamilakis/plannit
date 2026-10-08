@@ -14,7 +14,7 @@ OPENINGS = []  # (x0, x1, z0, z1, along_x, a, b, sill, head, kind, is_new) — r
 def setup(argv, project, views, ceil):
     """argv = the arguments after '--': MODE CAMS PCT SAMPLES. `views` = the project's views module
     (palettes, cut heights); `ceil` = the project's single ceiling height."""
-    global MODE, PALETTE, SUFFIX, INTERIOR, CAMS, PCT, SAMPLES, PROJECT, OUT, CEIL, CUT, PAL, PAL_PLANKS, SLIDING_OPEN, NIGHT_LIGHTS
+    global MODE, PALETTE, SUFFIX, INTERIOR, CAMS, PCT, SAMPLES, PROJECT, OUT, CEIL, CUT, PAL, PAL_PLANKS, SLIDING_OPEN, NIGHT_LIGHTS, FURNISHED
     MODE = argv[0] if argv else 'interior'
     # colour scheme: append '-b' to the mode (interior-b, night-b, cutaway-b, plan-b) for palette B; '-c' and
     # '-d' (2026-09-22) are the two stricter candidates C and D. Output files get a matching _b/_c/_d suffix.
@@ -26,6 +26,11 @@ def setup(argv, project, views, ceil):
     PCT = int(argv[2]) if len(argv) > 2 else 100
     SAMPLES = int(argv[3]) if len(argv) > 3 else 128
     PROJECT = project
+    # an empty flat (2026-10-08): a file UNFURNISHED in the project folder drops everything a design marks loose
+    # (loose_start() .. loose_end() in api.py) — the flat as a tenant walks into it. Its images get an '_empty'
+    # suffix, so they never overwrite (or share fingerprints with) the furnished ones.
+    FURNISHED = not os.path.exists(os.path.join(PROJECT, 'UNFURNISHED'))
+    if not FURNISHED: SUFFIX += '_empty'
     OUT = os.environ.get('RENDER_OUT') or os.path.join(PROJECT, 'out', 'renders')
     CEIL = ceil
     # the section height of the cut-open views: the project's views.CUTS per mode, else the full height

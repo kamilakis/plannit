@@ -1,9 +1,25 @@
 """Parametric furniture: chairs, speakers, framed art, a library bookcase, beds, an outdoor lounge chair."""
 import math
 import bpy
-from .ctx import CEIL
+from .ctx import CEIL, FURNISHED, SHAPES
 from .geometry import box, cyl, disc, rbox, link, rod
 from .materials import BOOKC, M
+
+# ---- loose furniture (2026-10-08). A design marks what a tenant would bring — beds, sofas, chairs, desks, books,
+# appliances, rugs, art, the things on the counters — between loose_start() and loose_end(); what stays is the
+# finished flat: walls, built-in joinery, the kitchen, sanitary ware, lights. Furnished (the default) the markers
+# do nothing; with UNFURNISHED (ctx.py) everything made in between is deleted again at loose_end(), so the calls
+# in between still run in the same order and consume the same random numbers.
+_LOOSE = []
+def loose_start():
+    assert not _LOOSE, 'loose_start() twice without loose_end()'
+    _LOOSE.append((set(bpy.data.objects), len(SHAPES)))
+
+def loose_end():
+    before, n = _LOOSE.pop()
+    if FURNISHED: return
+    for o in [o for o in bpy.data.objects if o not in before]: bpy.data.objects.remove(o, do_unlink=True)
+    del SHAPES[n:]
 
 def counter_chair(cx, cz, face='S'):     # face: 'S' = faces south (sits on the north side), 'W' = faces west
     box(cx - 0.21, cx + 0.21, cz - 0.21, cz + 0.21, 0.63, 0.67, 'oak', 0.01, name='cseat')
@@ -69,6 +85,7 @@ def bookcase(x0, x1, z0, z1, along_x, shelves=(0.0, 0.42, 0.80, 1.18, 1.56, 1.94
         if along_x: box(x0 + 0.003, x1 - 0.003, z0, z1 - 0.004, s + 0.08 - t, s + 0.08, 'oak', name='bc_shelf')
         else: box(x0, x1 - 0.004, z0 + 0.003, z1 - 0.003, s + 0.08 - t, s + 0.08, 'oak', name='bc_shelf')
     depth0, depth1 = (z0, z1) if along_x else (x0, x1)
+    loose_start()                                                         # the books are the tenant's
     for k in range(nb):
         for si, s in enumerate(shelves[:-1]):
             if si == 3 and k % 2 == 0: continue                          # a few open bays for objects
@@ -80,6 +97,7 @@ def bookcase(x0, x1, z0, z1, along_x, shelves=(0.0, 0.42, 0.80, 1.18, 1.56, 1.94
                 if along_x: box(x0 + u, x0 + u + w, depth0 + 0.03, depth1 - 0.03, s + 0.08, s + 0.08 + h, c, name='book')
                 else: box(depth0 + 0.03, depth1 - 0.03, z0 + u, z0 + u + w, s + 0.08, s + 0.08 + h, c, name='book')
                 u += w + 0.002
+    loose_end()
 
 def office_chair(cx, cz, face='N'):     # face: the way the sitter looks — 'N' (-z, the default), 'S', 'W' (-x), 'E'
     for k in range(5):
