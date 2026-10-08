@@ -8,6 +8,7 @@
 const STORE = '@STORE@';
 const DOCROOT = '@DOCROOT@';
 const MAX_TEXT = 2000, MAX_NAME = 80, PER_HOUR = 10;
+date_default_timezone_set('Europe/Athens');   // the server runs on UTC; notes and `published` read in local time
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
