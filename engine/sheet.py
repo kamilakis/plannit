@@ -29,6 +29,8 @@ class Sheet:
         a door's swing and its tag go into the other room. labels: {name: (text, vertical)} to print a room
         under another text and/or turned 90° (narrow closets); anything else prints its name, level."""
         self.E = []; self.rooms = rooms; self.circulation = set(circulation); self.labels = labels or {}; self.solids = []
+        self.own = {}                                 # text index -> the indices of its own dimension's lines (check())
+        self.movable = []                             # label groups resolve() may move: (entity indices, [(dx, dz) offsets to try], rank)
     # ---- primitives
     def line(s, l, a, b): s.E.append(('line', l, a, b))
     def pline(s, l, pts, closed=True): s.E.append(('pline', l, list(pts), closed))
@@ -60,8 +62,18 @@ class Sheet:
         total = 0
         for name, (rs, p) in s.rooms.items():
             ar = s.area(name); total += ar; nm, vert = s.labels.get(name, (name, False))
+            i0 = len(s.E)
             s.text('ROOM_TEXT', p, nm, 2.2 if vert else 2.8, 90 if vert else 0)
             s.text('ROOM_TEXT', (p[0] + 0.16, p[1]) if vert else (p[0], p[1] + 0.2), f'Ε={gr(ar)}τ.μ.', 1.7, 90 if vert else 0)
+            # the name and its area move together, to spots still inside the room (a grid, nearest first)
+            offs = sorted(((dx * 0.15, dz * 0.15) for dx in range(-8, 9) for dz in range(-8, 9)), key=lambda o: math.hypot(*o))
+            def inside(o, m=0.08):                    # both lines' boxes, with a margin, wholly inside the room
+                for e in s.E[i0:i0 + 2]:
+                    bx = s.text_box(('text', e[1], (e[2][0] + o[0], e[2][1] + o[1])) + e[3:])
+                    if not all(s.room_at(x, z) == name for x in (bx[0] - m, bx[1] + m) for z in (bx[2] - m, bx[3] + m)): return False
+                return True
+            offs = [o for o in offs if inside(o)] or [(0, 0)]
+            s.movable.append(([i0, i0 + 1], offs, 3))
         for p, t in extra: s.text('ROOM_TEXT', p, t, 2.4)
         return total
     # ---- walls: [(x0, x1, z0, z1, style)] style 'old' | 'new' | 'demolished'; opens: see openings()
@@ -98,7 +110,13 @@ class Sheet:
             s.pline('BEAMS', rect(x0, x1, z0, z1))
             horiz = (x1 - x0) > (z1 - z0); m = ((x0 + x1) / 2, (z0 + z1) / 2)
             s.text('BEAM_TEXT', (m[0], z1 + 0.12) if horiz else (x1 + 0.12, m[1]),
-                   f'ΔΟΚΟΣ {gr(min(x1 - x0, z1 - z0))} · κάτω παρειά +{gr(soffit)}', 1.6, 0 if horiz else 90)
+                   f'ΔΟΚΟΣ {gr(min(x1 - x0, z1 - z0))} · κ.π. +{gr(soffit)}', 1.6, 0 if horiz else 90)
+            # along the beam, either side of it
+            L = (x1 - x0) if horiz else (z1 - z0); across = -((z1 - z0) if horiz else (x1 - x0)) - 0.24
+            half = s.text_box(s.E[-1]); half = ((half[1] - half[0]) if horiz else (half[3] - half[2])) / 2
+            offs = [(0, 0)] + [(u, v) if horiz else (v, u) for k in range(1, int(max(0, L / 2 - half) / 0.25) + 1)
+                               for u in (k * 0.25, -k * 0.25) for v in (0, across)] + [(0, across) if horiz else (across, 0)]
+            s.movable.append(([len(s.E) - 1], offs, 1))
     # ---- openings: (kind, a, b, thickness, (width, head, sill) strings or None); a/b on the wall centre line
     @staticmethod
     def reading(a, b):
@@ -108,9 +126,20 @@ class Sheet:
         t = math.radians(th); return th, (math.cos(t), -math.sin(t)), (-math.sin(t), -math.cos(t))
     def tag(s, c, a, b, w, head, sill, layer='OPENING_TEXT'):
         th, rd, up = s.reading(a, b); P = lambda p, k, v: (p[0] + k[0] * v, p[1] + k[1] * v)
+        i0 = len(s.E)
         s.text(layer, P(c, up, 0.075), w, 1.8, th); s.text(layer, P(c, up, -0.075), head, 1.8, th)
         s.line(layer, P(c, rd, -0.17), P(c, rd, 0.17))
         if sill: s.text(layer, P(c, rd, 0.21), sill, 1.8, th, 'l')
+        # further from the wall (the side it is on: away from the opening's centre line), or along it
+        L = math.hypot(b[0] - a[0], b[1] - a[1]); mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+        nrm = (c[0] - mid[0], c[1] - mid[1]); nl = math.hypot(*nrm) or 1; nrm = (nrm[0] / nl, nrm[1] / nl)
+        along = ((b[0] - a[0]) / L, (b[1] - a[1]) / L)
+        offs = [(0, 0)]
+        for d in (0.15, 0.3, 0.45, 0.6, 0.75):
+            for t in (0, 0.25, -0.25, 0.5, -0.5):
+                if abs(t) <= L / 2 + 0.25: offs.append((nrm[0] * d + along[0] * t, nrm[1] * d + along[1] * t))
+        for t in (0.25, -0.25, 0.5, -0.5): offs.append((along[0] * t, along[1] * t))
+        s.movable.append((list(range(i0, len(s.E))), offs, 2))
     def openings(s, opens):
         for kind, a, b, t, spec in opens:
             dx, dz = b[0] - a[0], b[1] - a[1]; L = math.hypot(dx, dz); u = (dx / L, dz / L); n = (-u[1], u[0])
@@ -152,6 +181,7 @@ class Sheet:
     def tick(s, p): s.line('DIMENSIONS', (p[0] - 0.05, p[1] + 0.05), (p[0] + 0.05, p[1] - 0.05))
     def dim(s, a, b, at, horiz, ext_from=None, label=True):
         if abs(b - a) < 0.02: return
+        first = len(s.E)
         P = (lambda u: (u, at)) if horiz else (lambda u: (at, u))
         s.line('DIMENSIONS', P(a), P(b)); s.tick(P(a)); s.tick(P(b))
         if ext_from is not None:
@@ -162,6 +192,16 @@ class Sheet:
             m = (a + b) / 2
             if horiz: s.text('DIM_TEXT', (m, at - 0.09), m2(abs(b - a)), 1.8)
             else: s.text('DIM_TEXT', (at - 0.09, m), m2(abs(b - a)), 1.8, 90)
+            s.own[len(s.E) - 1] = set(range(first, len(s.E) - 1))
+            # slide along its line (staying inside its span), or flip to the other side of it
+            room = abs(b - a) / 2 - len(m2(abs(b - a))) * 0.6 * 1.8 * 1.38 / PX / 2 - 0.03
+            offs = [(0, 0), (0.18, 0) if not horiz else (0, 0.18)]
+            k = 1
+            while k * 0.15 <= room:
+                for u in (k * 0.15, -k * 0.15):
+                    for v in (0, 0.18): offs.append((u, v) if horiz else (v, u))
+                k += 1
+            s.movable.append(([len(s.E) - 1], offs, 0))
     def chain(s, pts, at, horiz, ext_from, total=0.45):
         pts = sorted(set(round(p, 3) for p in pts))
         for a, b in zip(pts, pts[1:]): s.dim(a, b, at, horiz, ext_from)
@@ -188,11 +228,108 @@ class Sheet:
         for (a0, a1), (b0, b1) in zip(m, m[1:]):
             if a1 <= u <= b0: s.dim(a1, b0, at, horiz); return
         raise SystemExit(f'room_dim: no space around {u} on cut {at}')
+    # ---- legibility check: every label's box against the other labels, the dimension, door, beam and fixture
+    # lines, and the walls. PLANNIT_SHEET_CHECK=1 prints what collides; the sheet is only right when it prints nothing.
+    @staticmethod
+    def text_box(e, pad=0.0):
+        """A text entity's box in plan metres (x0, x1, z0, z1): DejaVu Sans Condensed at h * 1.38 mm, centred
+        vertically (the SVG's dominant-baseline), ~0.60 em a character (capitals and digits), 0.92 em tall (accents
+        included): generous on purpose, a label that only just clears is still hard to read. pad widens every side."""
+        _, _, p, t, h, rot, al = e
+        w = len(t) * 0.60 * h * 1.38 / PX; ht = 0.92 * h * 1.38 / PX
+        a0 = {'l': 0, 'c': -w / 2, 'r': -w}[al]
+        if abs(rot) < 1: return (p[0] + a0 - pad, p[0] + a0 + w + pad, p[1] - ht / 2 - pad, p[1] + ht / 2 + pad)
+        if abs(abs(rot) - 90) < 1:                    # turned 90° (reads upward): the run goes along -z
+            sg = 1 if rot > 0 else -1
+            u0, u1 = sorted((p[1] - sg * a0, p[1] - sg * (a0 + w)))
+            return (p[0] - ht / 2 - pad, p[0] + ht / 2 + pad, u0 - pad, u1 + pad)
+        return None                                   # slanted (tags on slanted walls): not checked
+    @staticmethod
+    def _seg_hits_box(a, b, bx):
+        x0, x1, z0, z1 = bx; t0, t1 = 0.0, 1.0; dx, dz = b[0] - a[0], b[1] - a[1]
+        for p, q in ((-dx, a[0] - x0), (dx, x1 - a[0]), (-dz, a[1] - z0), (dz, z1 - a[1])):
+            if abs(p) < 1e-12:
+                if q < 0: return False
+            else:
+                r = q / p
+                if p < 0: t0 = max(t0, r)
+                else: t1 = min(t1, r)
+                if t0 > t1: return False
+        return True
+    def _shift(s, i, dx, dz):
+        e = s.E[i]
+        if e[0] == 'text': s.E[i] = (e[0], e[1], (e[2][0] + dx, e[2][1] + dz)) + e[3:]
+        elif e[0] == 'line': s.E[i] = (e[0], e[1], (e[2][0] + dx, e[2][1] + dz), (e[3][0] + dx, e[3][1] + dz))
+    def _hits(s, group, upto):
+        """How many things the texts of one label group collide with (other labels, lines, walls)."""
+        own = set(group)
+        for i in group: own |= s.own.get(i, set())
+        n = 0
+        ov = lambda a, b: a[0] < b[1] and b[0] < a[1] and a[2] < b[3] and b[2] < a[3]
+        for i in group:
+            e = s.E[i]
+            if e[0] != 'text': continue
+            bi = s.text_box(e, 0.015)
+            if not bi: continue
+            for k in range(upto):
+                if k in own: continue
+                f = s.E[k]
+                if f[0] == 'text':
+                    bk = s.text_box(f)
+                    if bk and ov(bi, bk): n += 3                      # text on text: worst
+                elif f[0] == 'line' and f[1] in ('DIMENSIONS', 'DOORS', 'BEAMS', 'FIXTURES', 'WINDOWS') or \
+                     f[0] == 'pline' and f[1] in ('DOOR_SWING', 'BEAMS', 'FIXTURES', 'WALLS', 'DEMOLISHED', 'CLOSETS'):
+                    pts = [f[2], f[3]] if f[0] == 'line' else f[2] + ([f[2][0]] if f[3] else [])
+                    if any(s._seg_hits_box(pts[m], pts[m + 1], bi) for m in range(len(pts) - 1)): n += 1
+        return n
+    def resolve(s, upto, passes=3):
+        """Move each colliding label group to the first of its offsets where it collides with nothing (else to
+        the one with the fewest hits). Dimension figures go first, then opening tags, beam notes, room names."""
+        for _ in range(passes):
+            moved = False
+            for group, offs, _rank in sorted(s.movable, key=lambda g: g[2]):
+                if not s._hits(group, upto): continue
+                best, here = None, (0, 0)
+                for dx, dz in offs:
+                    for i in group: s._shift(i, dx - here[0], dz - here[1])
+                    here = (dx, dz); h = s._hits(group, upto)
+                    if best is None or h < best[0]: best = (h, dx, dz)
+                    if h == 0: break
+                for i in group: s._shift(i, best[1] - here[0], best[2] - here[1])
+                moved = moved or (best[1], best[2]) != (0, 0)
+            if not moved: break
+    def check(s, upto=None):
+        E = s.E[:upto] if upto else s.E
+        texts = [(i, e) for i, e in enumerate(E) if e[0] == 'text']
+        boxes = {i: s.text_box(e) for i, e in texts}
+        out = []
+        ov = lambda a, b: a[0] < b[1] and b[0] < a[1] and a[2] < b[3] and b[2] < a[3]
+        for n, (i, e) in enumerate(texts):
+            bi = boxes[i]
+            if not bi: continue
+            for j, f in texts[n + 1:]:
+                bj = boxes[j]
+                if bj and ov(bi, bj): out.append(f'text/text  "{e[3]}" ({e[1]})  x  "{f[3]}" ({f[1]})')
+            inner = (bi[0] + 0.002, bi[1] - 0.002, bi[2] + 0.002, bi[3] - 0.002)
+            for k, f in enumerate(E):
+                if f[0] == 'line' and f[1] in ('DIMENSIONS', 'DOORS', 'BEAMS', 'FIXTURES', 'WINDOWS') or \
+                   f[0] == 'pline' and f[1] in ('DOOR_SWING', 'BEAMS', 'FIXTURES', 'WALLS', 'DEMOLISHED', 'CLOSETS'):
+                    if k in s.own.get(i, ()): continue                               # its own dimension line sits right under it
+                    pts = [f[2], f[3]] if f[0] == 'line' else f[2] + ([f[2][0]] if f[3] else [])
+                    if any(s._seg_hits_box(pts[m], pts[m + 1], inner) for m in range(len(pts) - 1)):
+                        out.append(f'text/{f[1].lower():<11} "{e[3]}" ({e[1]})'); break
+        return out
     # ---- the A3 sheet, then both files
     def finish(s, base, rows, legend, notes):
         """rows: [(label, value)] for the title block; legend: [(kind, text)] with kind in
         'hatch' 'new' 'demolished' 'concrete' 'beam' 'fraction'; notes: lines of text."""
         draw_end = len(s.E)
+        s.resolve(draw_end)
+        import os
+        if os.environ.get('PLANNIT_SHEET_CHECK'):
+            found = s.check(draw_end)
+            print(f'{os.path.basename(base)}: {len(found)} legibility problem(s)')
+            for f in found: print('   ' + f)
         def pts_of(e): return [e[2], e[3]] if e[0] == 'line' else (e[2] if e[0] in ('pline', 'solid') else [e[2]])
         allp = [p for e in s.E[:draw_end] for p in pts_of(e)]
         x0, x1 = min(p[0] for p in allp), max(p[0] for p in allp); z0, z1 = min(p[1] for p in allp), max(p[1] for p in allp)
