@@ -176,6 +176,9 @@ def run(views):
         try: return tuple(round(float(x), 4) for x in v)
         except Exception: return type(v).__name__
     _MS, _EMIT = {}, set()
+    def _imgsig(im):             # the picture's bytes, not its path: the path holds the farm job's folder, which changes
+        try: return hashlib.sha1(open(bpy.path.abspath(im.filepath), 'rb').read()).hexdigest()[:16]   # every job (12 Oct)
+        except OSError: return os.path.basename(im.filepath)
     def _mat(m):
         if m is None: return 'none'
         if m.name not in _MS:
@@ -187,7 +190,7 @@ def run(views):
                         if hasattr(i, 'default_value'):
                             parts.append((i.name, _val(i.default_value)))
                             if i.name == 'Emission Strength' and float(i.default_value) > 0: _EMIT.add(m.name)
-                    if getattr(n, 'image', None): parts.append(n.image.filepath)
+                    if getattr(n, 'image', None): parts.append(_imgsig(n.image))
                 parts += sorted(f'{l.from_node.name}.{l.from_socket.name}>{l.to_node.name}.{l.to_socket.name}' for l in m.node_tree.links)
             _MS[m.name] = _h(*parts)
         return _MS[m.name]
@@ -199,11 +202,27 @@ def run(views):
                 cy.transmission_bounces, cy.use_denoising, cy.denoiser, getattr(cy, 'adaptive_threshold', 0), S.render.resolution_percentage]
     if S.world and S.world.node_tree:
         _GLOBAL += [(n.bl_idname, [_val(i.default_value) for i in n.inputs if hasattr(i, 'default_value')]) for n in S.world.node_tree.nodes]
+    # Lights (12 Oct): only the sun lights the whole flat. A lamp counts toward a view if some point of the space it
+    # lights — its own outline grown by _LAMP_REACH, sampled on a 3x3x3 grid — is reached both from the lamp and from
+    # the camera without a wall in between (or the lamp is within 2 m of the camera). Before, every lamp was global:
+    # moving one LED in a bedroom re-rendered all 151 images.
+    _LAMP_REACH = 1.0
+    _LAMPS = []                                    # (signature, world position, grid points)
     for o in S.objects:
         mw = o.matrix_world
         if o.type == 'LIGHT':
-            L = o.data; _GLOBAL.append((L.type, L.energy, _val(L.color), _val(mw.translation), _val(o.rotation_euler),
-                                        getattr(L, 'size', 0), getattr(L, 'size_y', 0), getattr(L, 'angle', 0))); continue
+            L = o.data
+            key = (L.type, L.energy, _val(L.color), _val(mw.translation), _val(o.rotation_euler),
+                   getattr(L, 'size', 0), getattr(L, 'size_y', 0), getattr(L, 'angle', 0))
+            if L.type == 'SUN': _GLOBAL.append(key); continue
+            hx = getattr(L, 'size', 0) / 2
+            hy = (L.size_y if getattr(L, 'shape', '') in ('RECTANGLE', 'ELLIPSE') else getattr(L, 'size', 0)) / 2 if L.type == 'AREA' else hx
+            ends = [mw @ Vector((sx * hx, sy * hy, 0)) for sx in (-1, 1) for sy in (-1, 1)]
+            lo = [min(e[i] for e in ends) - _LAMP_REACH for i in range(3)]
+            hi = [max(e[i] for e in ends) + _LAMP_REACH for i in range(3)]
+            grid = [Vector((lo[0] + (hi[0] - lo[0]) * i / 2, lo[1] + (hi[1] - lo[1]) * j / 2, lo[2] + (hi[2] - lo[2]) * k / 2))
+                    for i in range(3) for j in range(3) for k in range(3)]
+            _LAMPS.append((_h('lamp', *key), mw.translation.copy(), grid)); continue
         if o.type != 'MESH': continue
         mats = tuple(_mat(s.material) for s in o.material_slots)
         vs = o.data.vertices; acc = 0
@@ -242,6 +261,13 @@ def run(views):
         # Seen if a ray from the camera reaches its centre or any corner (pulled 3 cm inward) unobstructed.
         cl = cam.matrix_world.translation
         return any(_unblocked(cl, c + (centre - c) * min(1.0, 0.03 / max((centre - c).length, 1e-6)), obj) for c in [centre] + corners)
+    def _lamp_seen(cam, lp, grid):
+        cl = cam.matrix_world.translation
+        if (lp - cl).length < 2.0: return True
+        pts = [world_to_camera_view(S, cam, g) for g in grid]
+        if not any(p.z > 0 and -0.2 < p.x < 1.2 and -0.2 < p.y < 1.2 for p in pts): return False
+        return any(p.z > 0 and -0.2 < p.x < 1.2 and -0.2 < p.y < 1.2 and _unblocked(lp, g, None) and _unblocked(cl, g, None)
+                   for p, g in zip(pts, grid))
     for name, (cam, expo, res) in CAMERAS.items():
         if CAMS != 'all' and name not in CAMS.split(','): continue
         S.camera = cam; S.view_settings.exposure = expo + (NIGHT_EV if MODE == 'night' else 0.0)
@@ -250,13 +276,18 @@ def run(views):
         img = name + SUFFIX + ('_night' if MODE == 'night' else '') + '.jpg'
         S.render.filepath = os.path.join(OUT, img)
         cd = cam.data
-        _vis = sorted(sig for sig, cs, c, ob in _OBJ if _sees(cam, cs, c, ob))
+        _vis = sorted([sig for sig, cs, c, ob in _OBJ if _sees(cam, cs, c, ob)] +
+                      [sig for sig, lp, grid in _LAMPS if _lamp_seen(cam, lp, grid)])
         fp = _h(_GSIG, _val(cam.matrix_world), cd.type, cd.lens, cd.ortho_scale, S.view_settings.exposure,
                 S.render.resolution_x, S.render.resolution_y, _vis)
         _NEW[img] = fp
-        if os.path.exists(os.path.join(_HERE, 'HASHDEBUG')): json.dump([_GSIG] + _vis, open(os.path.join(OUT, img + '.sigs.json'), 'w'))
+        if os.path.exists(os.path.join(_HERE, 'HASHDEBUG')):     # which objects (by name) and lamps (by place) the view counts
+            _nm = {sig: ob.name for sig, cs, c, ob in _OBJ}; _nm.update({sig: 'lamp@' + str(_val(lp)) for sig, lp, g in _LAMPS})
+            json.dump({'global': _GSIG, 'seen': {sig: _nm.get(sig, '?') for sig in _vis}}, open(os.path.join(OUT, img + '.sigs.json'), 'w'), indent=0)
         if os.environ.get('RENDER_HASHONLY') == '1':   # fingerprints only, no render: proves a refactor changed nothing
-            print('HASH', img, fp, flush=True); continue
+            print('HASH', img, fp, flush=True)                         # tools/proof.sh reads these
+            print('RENDERED', name, 'hash-only', img, fp, flush=True)  # the farm's watcher keeps only ^RENDERED lines
+            continue
         if not _FORCE and _OLD.get(img) == fp:
             print('RENDERED', name, 'unchanged — skipped', flush=True)   # still '^RENDERED': the watcher counts these
             continue
