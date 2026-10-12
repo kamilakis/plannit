@@ -2,7 +2,7 @@
 the 'house' collection; box() also records SHAPES, wall() WALLS and OPENINGS for the technical sheets."""
 import bpy, math
 from mathutils import Vector
-from .ctx import MODE, CUT, CEIL, INTERIOR, SHAPES, WALLS, OPENINGS, SLIDING_OPEN
+from .ctx import MODE, CUT, UNCUT, CEIL, INTERIOR, SHAPES, WALLS, OPENINGS, SLIDING_OPEN
 from .materials import M
 S = bpy.context.scene
 
@@ -15,8 +15,9 @@ def box(x0, x1, z0, z1, h0, h1, m, bevel=0.0, seg=3, name='box'):
     # is the exception: a window whose sill sits just under the cut has to survive, or the opening
     # disappears and the wall renders solid — which is exactly how the kitchen window (sill 1.29) went
     # missing from the plan. For glass, drop only if it is genuinely above the cut.
-    if MODE in ('cutaway', 'plan', 'glb') and h0 >= (CUT if name == 'glass' else CUT - 0.2): return None
-    h1 = min(h1, CUT)
+    if not (UNCUT and name.startswith(UNCUT)):  # views.UNCUT: shapes this mode keeps whole above the cut
+        if MODE in ('cutaway', 'plan', 'glb') and h0 >= (CUT if name == 'glass' else CUT - 0.2): return None
+        h1 = min(h1, CUT)
     x0, x1 = sorted((x0, x1)); z0, z1 = sorted((z0, z1))
     SHAPES.append((name, x0, x1, z0, z1, h0, h1, m if isinstance(m, str) else m.name))
     if name == 'wall':               # jitter so butting walls never share a coplanar face (renders as black seams)
