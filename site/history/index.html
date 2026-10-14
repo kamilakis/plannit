@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Render history</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,500&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#efeeea; --paper:#f8f7f4; --ink:#1f1e1b; --muted:#6b675f; --rule:#d8d4cb;
+  --oak:#a8784a; --oak-soft:#e6d6c2; --new:#3d6b58; --gone:#a4523a;
+  --display:"Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --body:"Hanken Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#191816; --paper:#221f1c; --ink:#ece8e1; --muted:#a39d92; --rule:#38342f;
+  --oak:#d1a577; --oak-soft:#3a2f24; --new:#7fb49c; --gone:#e0866a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --ground:#191816; --paper:#221f1c; --ink:#ece8e1; --muted:#a39d92; --rule:#38342f;
+  --oak:#d1a577; --oak-soft:#3a2f24; --new:#7fb49c; --gone:#e0866a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--ground); color:var(--ink); font:16px/1.55 var(--body); margin:0; padding:0 16px}
+main{max-width:1180px; margin:0 auto; padding:56px 0 80px}
+a{color:var(--oak)}
+.eyebrow{font:500 12px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:0 0 10px}
+h1{font:300 clamp(28px,4.5vw,42px)/1.1 var(--display); letter-spacing:-.02em; margin:0; text-wrap:balance}
+h2{font:500 22px/1.2 var(--display); margin:0}
+.lede{font-size:17px; color:var(--muted); margin:12px 0 0; max-width:64ch}
+.langtoggle{position:fixed; top:10px; right:10px; z-index:20; display:inline-flex; gap:2px; padding:3px; border-radius:999px; background:var(--paper); border:1px solid var(--rule)}
+.langtoggle button{border:0; background:none; border-radius:999px; padding:6px 11px; cursor:pointer; font:600 11px/1 var(--mono); color:var(--muted)}
+.langtoggle button[aria-pressed="true"]{background:var(--ink); color:var(--ground)}
+button{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--oak); outline-offset:2px}
+
+.tabs{display:flex; gap:4px; margin:32px 0 18px; border-bottom:1px solid var(--rule)}
+.tabs button{border:0; background:none; padding:10px 14px; cursor:pointer; font:500 15px/1 var(--body); color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--ink); border-bottom-color:var(--ink)}
+
+/* compare */
+#compare{background:var(--paper); border:1px solid var(--rule); border-radius:10px; padding:16px; margin:24px 0 32px}
+#compare[hidden]{display:none}
+.chead{display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 16px}
+.close{border:1px solid var(--rule); background:none; border-radius:999px; padding:5px 12px; cursor:pointer; font:500 13px/1 var(--body); color:var(--muted)}
+.row{display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center; margin-top:12px}
+.seg{display:inline-flex; gap:2px; padding:3px; border-radius:999px; border:1px solid var(--rule); background:var(--ground)}
+.seg button{border:0; background:none; border-radius:999px; padding:6px 11px; cursor:pointer; font:500 13px/1 var(--body); color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink); color:var(--ground)}
+.seg button:disabled{opacity:.35; cursor:default}
+.pick{display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center}
+.pick label{font:500 12px/1 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); display:flex; gap:8px; align-items:center}
+.pick label.a::before,.pick label.b::before{content:""; width:10px; height:10px; border-radius:50%}
+.pick label.a::before{background:var(--gone)} .pick label.b::before{background:var(--new)}
+select{font:14px var(--body); color:var(--ink); background:var(--ground); border:1px solid var(--rule); border-radius:6px; padding:6px 8px; min-width:0; max-width:min(calc(100vw - 130px),340px)}
+.step{border:1px solid var(--rule); background:var(--ground); border-radius:6px; padding:6px 10px; cursor:pointer}
+.step:disabled{opacity:.35; cursor:default}
+.stage{position:relative; margin-top:14px; user-select:none; -webkit-user-select:none; touch-action:pan-y; background:var(--ground); border-radius:6px; overflow:hidden}
+.stage img{display:block; width:100%; height:auto}
+.stage .over{position:absolute; inset:0}
+.stage .over img{width:100%; height:100%; object-fit:contain}
+.handle{position:absolute; top:0; bottom:0; width:0; border-left:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.25); cursor:ew-resize}
+.handle::after{content:"⟷"; position:absolute; top:50%; left:-19px; width:36px; height:36px; margin-top:-18px; border-radius:50%; background:#fff; color:#222; display:grid; place-items:center; font:16px/1 var(--body); box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.tag{position:absolute; top:10px; padding:4px 9px; border-radius:999px; font:500 12px/1.2 var(--mono); color:#fff; pointer-events:none; max-width:45%}
+.tag.a{left:10px; background:color-mix(in srgb, var(--gone) 88%, black)} .tag.b{right:10px; background:color-mix(in srgb, var(--new) 88%, black)}
+.side{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.side figure{margin:0; position:relative}
+@media (max-width:700px){ .side{grid-template-columns:1fr} }
+.hint{font-size:13px; color:var(--muted); margin:10px 0 0}
+
+/* lists */
+.step-card{border-top:1px solid var(--rule); padding:18px 0}
+.step-card header{display:flex; flex-wrap:wrap; gap:4px 14px; align-items:baseline}
+.when{font:500 13px/1.3 var(--mono); color:var(--muted)}
+.what{font:500 17px/1.35 var(--body)}
+.count{font-size:13px; color:var(--muted)}
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin-top:12px}
+.thumb{border:1px solid var(--rule); background:var(--paper); border-radius:6px; padding:0; overflow:hidden; cursor:pointer; text-align:left}
+.thumb img{display:block; width:100%; aspect-ratio:16/10; object-fit:cover; background:var(--ground)}
+.thumb span{display:block; padding:6px 8px; font-size:13px; line-height:1.3}
+.thumb small{display:block; color:var(--muted); font-size:12px}
+.thumb:hover{border-color:var(--oak)}
+.more{border:1px solid var(--rule); background:none; border-radius:999px; padding:6px 12px; margin-top:10px; cursor:pointer; font-size:13px; color:var(--muted)}
+footer{margin-top:48px; font-size:13px; color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="langtoggle" role="group" aria-label="Γλώσσα / Language">
+  <button type="button" data-lang="el" aria-pressed="true">ΕΛ</button>
+  <button type="button" data-lang="en" aria-pressed="false">EN</button>
+</div>
+<main>
+  <p class="eyebrow">__NAME__</p>
+  <h1 data-t="title"></h1>
+  <p class="lede" data-t="lede"></p>
+  <p class="lede"><a href="../presentation/" data-t="back"></a></p>
+
+  <section id="compare" hidden aria-live="polite">
+    <div class="chead"><h2 id="ctitle"></h2><button class="close" type="button" data-t="close"></button></div>
+    <div class="row" id="variants"></div>
+    <div class="row">
+      <div class="pick">
+        <label class="a"><span data-t="before"></span><select id="selA"></select></label>
+        <label class="b"><span data-t="after"></span><select id="selB"></select></label>
+        <span><button class="step" type="button" id="prev" aria-label="◀">◀</button> <button class="step" type="button" id="next" aria-label="▶">▶</button></span>
+      </div>
+      <div class="seg" id="modes">
+        <button type="button" data-mode="slider" data-t="slider"></button>
+        <button type="button" data-mode="flip" data-t="flip"></button>
+        <button type="button" data-mode="side" data-t="side"></button>
+      </div>
+    </div>
+    <div id="stagewrap"></div>
+    <p class="hint" id="hint"></p>
+  </section>
+
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="steps" aria-selected="true" data-t="bychange"></button>
+    <button type="button" role="tab" data-tab="views" aria-selected="false" data-t="byview"></button>
+  </div>
+  <div id="list"></div>
+  <footer data-t="foot"></footer>
+</main>
+<script>
+const D = /*__DATA__*/null;
+const T = {
+  el: {title:'Ιστορικό απεικονίσεων', lede:'Κάθε εκδοχή κάθε απεικόνισης, από τις 28 Σεπτεμβρίου. Διάλεξε μια αλλαγή ή μια όψη και σύγκρινε δύο εκδοχές: σύρε τη λαβή, ή πάτα πάνω στην εικόνα για εναλλαγή.',
+       back:'← Στην παρουσίαση', close:'Κλείσιμο ✕', before:'Πριν', after:'Μετά', slider:'Σύρσιμο', flip:'Εναλλαγή', side:'Δίπλα-δίπλα',
+       bychange:'Ανά αλλαγή', byview:'Ανά όψη', renders:n=>n===1?'1 απεικόνιση':n+' απεικονίσεις', views:n=>n===1?'1 όψη':n+' όψεις',
+       versions:n=>n===1?'1 εκδοχή':n+' εκδοχές', more:n=>'+ άλλες '+n, latest:'τελευταία', first:'πρώτη εμφάνιση',
+       hslider:'Σύρε τη λαβή · τα βέλη ◀ ▶ μετακινούν το ζεύγος στο χρόνο.', hflip:'Πάτα την εικόνα (ή το κενό) για εναλλαγή Πριν / Μετά.', hside:'',
+       only:'Μόνο μία εκδοχή αυτής της απεικόνισης.', pal:{a:'Δρυς & λινό', b:'Καρυδιά, λάδι & τραβερτίνης', d:'Μελάνι, λευκό & καπνιστή δρυς'},
+       day:'Μέρα', night:'Νύχτα', furn:'Επιπλωμένο', empty:'Άδειο', newv:'νέα όψη', foot:'Οι εικόνες εδώ είναι αντίγραφα 1600 px· οι πλήρεις βρίσκονται στην παρουσίαση.'},
+  en: {title:'Render history', lede:'Every version of every render since 28 September. Pick a change or a view and compare two versions: drag the handle, or tap the image to flip.',
+       back:'← Back to the presentation', close:'Close ✕', before:'Before', after:'After', slider:'Slider', flip:'Flip', side:'Side by side',
+       bychange:'By change', byview:'By view', renders:n=>n===1?'1 render':n+' renders', views:n=>n===1?'1 view':n+' views',
+       versions:n=>n===1?'1 version':n+' versions', more:n=>'+ '+n+' more', latest:'latest', first:'first appearance',
+       hslider:'Drag the handle · ◀ ▶ move the pair through time.', hflip:'Tap the image (or press space) to flip Before / After.', hside:'',
+       only:'Only one version of this render.', pal:{a:'Oak & linen', b:'Walnut, olive & travertine', d:'Ink, white & smoked oak'},
+       day:'Day', night:'Night', furn:'Furnished', empty:'Empty', newv:'new view', foot:'Images here are 1600 px copies; the full ones are on the presentation page.'}
+};
+let lang = 'el';
+try { if (localStorage.getItem('lang') === 'en') lang = 'en'; } catch (e) {}
+const t = k => T[lang][k];
+const fmt = iso => new Date(iso).toLocaleString(lang === 'el' ? 'el-GR' : 'en-GB', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false});
+const stepLabel = c => (lang === 'el' ? c.el : c.en) || '';
+const viewOf = {}; D.views.forEach(v => Object.keys(v.files).forEach(s => viewOf[s] = v));
+const title = v => lang === 'el' ? v.el : v.en;
+const PREF = s => { const [p, n, e] = viewOf[s].files[s]; return (n ? 4 : 0) + (e ? 2 : 0) + ({d:0, a:1, b:1.5}[p]); };
+const pickFile = stems => stems.slice().sort((x, y) => PREF(x) - PREF(y))[0];
+const src = (b, th) => (th ? 't/' : 'img/') + b + '.jpg';
+
+// ---- state
+const S = {tab:'steps', file:null, a:0, b:0, mode:'slider', flipB:true, x:50};
+function versions(f){ return D.files[f]; }
+function indexAt(f, ci){ const vs = versions(f); let k = -1; vs.forEach((v, i) => { if (v[0] <= ci) k = i; }); return k; }
+
+function open(f, a, b){
+  S.file = f; const n = versions(f).length;
+  S.b = b == null ? n - 1 : b; S.a = a == null ? Math.max(0, S.b - 1) : a;
+  renderCompare(); writeHash();
+  document.getElementById('compare').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function writeHash(){
+  const h = S.file ? `#f=${S.file}&a=${S.a}&b=${S.b}&m=${S.mode}&tab=${S.tab}` : `#tab=${S.tab}`;
+  history.replaceState(null, '', h);
+}
+function readHash(){
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (p.get('tab') === 'views') S.tab = 'views';
+  if (['slider','flip','side'].includes(p.get('m'))) S.mode = p.get('m');
+  const f = p.get('f');
+  if (f && D.files[f]) { const n = D.files[f].length, cl = v => Math.min(n - 1, Math.max(0, +v || 0));
+    S.file = f; S.b = p.has('b') ? cl(p.get('b')) : n - 1; S.a = p.has('a') ? cl(p.get('a')) : Math.max(0, S.b - 1); }
+}
+
+// ---- compare panel
+function vLabel(f, i){
+  const v = versions(f)[i], c = D.commits[v[0]], l = stepLabel(c);
+  return fmt(c.date) + (l ? ' · ' + l : '') + (i === versions(f).length - 1 ? ' (' + t('latest') + ')' : '');
+}
+function renderCompare(){
+  const box = document.getElementById('compare');
+  if (!S.file) { box.hidden = true; return; }
+  box.hidden = false;
+  const v = viewOf[S.file], vs = versions(S.file);
+  document.getElementById('ctitle').textContent = title(v);
+  // variant switches: palette, day/night, furnished/empty — only what this view has
+  const [p0, n0, e0] = v.files[S.file], has = (p, n, e) => Object.entries(v.files).find(([, q]) => q[0] === p && q[1] === n && q[2] === e);
+  const seg = (items) => '<div class="seg">' + items.map(([lab, f, on]) => `<button type="button" ${f ? `data-file="${f[0]}"` : 'disabled'} aria-pressed="${on}">${lab}</button>`).join('') + '</div>';
+  let h = '';
+  const pals = ['a','b','d'].filter(p => has(p, false, false) || has(p, true, false));
+  if (pals.length > 1 && !e0) h += seg(pals.map(p => [t('pal')[p], has(p, n0, false) || has(p, false, false), p === p0]));
+  if (has(p0, true, false) && !e0) h += seg([[t('day'), has(p0, false, false), !n0], [t('night'), has(p0, true, false), n0]]);
+  const em = Object.entries(v.files).find(([, q]) => q[2]);
+  if (em) h += seg([[t('furn'), has('d', false, false) || has('a', false, false), !e0], [t('empty'), em, e0]]);
+  const vb = document.getElementById('variants'); vb.innerHTML = h; vb.hidden = !h;
+  vb.querySelectorAll('button[data-file]').forEach(b => b.onclick = () => {
+    // keep the same moment in time: the versions current at the steps the old pair showed
+    const f = b.dataset.file, ca = vs[S.a][0], cb = vs[S.b][0];
+    S.file = f; S.b = Math.max(0, indexAt(f, cb)); S.a = Math.max(0, indexAt(f, ca));
+    if (S.a === S.b && S.b > 0 && ca !== cb) S.a = S.b - 1;
+    renderCompare(); writeHash();
+  });
+  const opts = vs.map((_, i) => `<option value="${i}">${vLabel(S.file, i)}</option>`).join('');
+  const sa = document.getElementById('selA'), sb = document.getElementById('selB');
+  sa.innerHTML = opts; sb.innerHTML = opts; sa.value = S.a; sb.value = S.b;
+  document.getElementById('prev').disabled = Math.min(S.a, S.b) <= 0;
+  document.getElementById('next').disabled = Math.max(S.a, S.b) >= vs.length - 1;
+  document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode));
+  drawStage();
+}
+function tagText(i){ const c = D.commits[versions(S.file)[i][0]]; return fmt(c.date); }
+function drawStage(){
+  const vs = versions(S.file), A = vs[S.a], B = vs[S.b], w = document.getElementById('stagewrap');
+  const ratio = `aspect-ratio:${B[2]}/${B[3]}`;
+  document.getElementById('hint').textContent = vs.length < 2 ? t('only') : t('h' + S.mode);
+  if (S.mode === 'side') {
+    w.innerHTML = `<div class="side">${[[A,'a',S.a],[B,'b',S.b]].map(([v, k, i]) => `<figure class="stage"><img src="${src(v[1])}" width="${v[2]}" height="${v[3]}" alt=""><span class="tag ${k}">${t(k === 'a' ? 'before' : 'after')} · ${tagText(i)}</span></figure>`).join('')}</div>`;
+    return;
+  }
+  if (S.mode === 'flip') {
+    const show = S.flipB ? [B, 'b', S.b] : [A, 'a', S.a];
+    w.innerHTML = `<div class="stage" tabindex="0" role="button" style="cursor:pointer;${ratio}"><img src="${src(show[0][1])}" width="${show[0][2]}" height="${show[0][3]}" alt=""><span class="tag ${show[1]}">${t(show[1] === 'a' ? 'before' : 'after')} · ${tagText(show[2])}</span></div>`;
+    [B, A].forEach(v => { const i = new Image(); i.src = src(v[1]); });   // preload the other side
+    const st = w.firstChild; st.onclick = () => { S.flipB = !S.flipB; drawStage(); };
+    st.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); st.click(); } };
+    return;
+  }
+  w.innerHTML = `<div class="stage" style="${ratio}"><img src="${src(B[1])}" width="${B[2]}" height="${B[3]}" alt="">
+    <div class="over" style="clip-path:inset(0 ${100 - S.x}% 0 0)"><img src="${src(A[1])}" alt=""></div>
+    <div class="handle" style="left:${S.x}%" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(S.x)}" aria-label="${t('before')} / ${t('after')}"></div>
+    <span class="tag a">${t('before')} · ${tagText(S.a)}</span><span class="tag b">${t('after')} · ${tagText(S.b)}</span></div>`;
+  const st = w.firstChild, over = st.querySelector('.over'), hd = st.querySelector('.handle');
+  const set = x => { S.x = Math.min(100, Math.max(0, x)); over.style.clipPath = `inset(0 ${100 - S.x}% 0 0)`; hd.style.left = S.x + '%'; hd.setAttribute('aria-valuenow', Math.round(S.x)); };
+  const at = e => { const r = st.getBoundingClientRect(); set((e.clientX - r.left) / r.width * 100); };
+  let drag = false;
+  st.addEventListener('pointerdown', e => { drag = true; st.setPointerCapture(e.pointerId); at(e); });
+  st.addEventListener('pointermove', e => { if (drag) at(e); });
+  st.addEventListener('pointerup', () => drag = false);
+  st.addEventListener('pointercancel', () => drag = false);
+  hd.onkeydown = e => { if (e.key === 'ArrowLeft') set(S.x - 5); if (e.key === 'ArrowRight') set(S.x + 5); };
+}
+document.getElementById('selA').onchange = e => { S.a = +e.target.value; renderCompare(); writeHash(); };
+document.getElementById('selB').onchange = e => { S.b = +e.target.value; renderCompare(); writeHash(); };
+document.getElementById('prev').onclick = () => { S.a--; S.b--; renderCompare(); writeHash(); };
+document.getElementById('next').onclick = () => { S.a++; S.b++; renderCompare(); writeHash(); };
+document.querySelectorAll('#modes button').forEach(b => b.onclick = () => { S.mode = b.dataset.mode; S.flipB = true; renderCompare(); writeHash(); });
+document.querySelector('#compare .close').onclick = () => { S.file = null; renderCompare(); writeHash(); };
+document.addEventListener('keydown', e => {
+  if (S.mode === 'flip' && S.file && e.key === ' ' && !/SELECT|BUTTON|INPUT/.test(document.activeElement.tagName)) { e.preventDefault(); S.flipB = !S.flipB; drawStage(); }
+});
+
+// ---- lists
+function thumb(f, vi, sub){
+  const v = versions(f)[vi];
+  return `<button type="button" class="thumb" data-file="${f}" data-b="${vi}"><img loading="lazy" src="${src(v[1], 1)}" alt=""><span>${title(viewOf[f]).split(' · ')[0]}${sub ? `<small>${sub}</small>` : ''}</span></button>`;
+}
+function renderList(){
+  const L = document.getElementById('list');
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === S.tab));
+  if (S.tab === 'views') {
+    L.innerHTML = '<div class="grid">' + D.views.map(v => {
+      const f = pickFile(Object.keys(v.files)), n = versions(f).length;
+      return thumb(f, n - 1, t('versions')(n));
+    }).join('') + '</div>';
+  } else {
+    L.innerHTML = D.commits.map((c, ci) => ({c, ci})).reverse().map(({c, ci}) => {
+      const byView = {};
+      c.n.forEach(s => { const v = viewOf[s]; if (v) (byView[v.base] = byView[v.base] || []).push(s); });
+      const items = Object.values(byView).map(stems => { const f = pickFile(stems), vi = indexAt(f, ci);
+        return thumb(f, vi, vi === 0 ? t('newv') : (stems.length > 1 ? t('renders')(stems.length) : '')); });
+      const shown = items.slice(0, 12), rest = items.length - shown.length, l = stepLabel(c);
+      return `<article class="step-card"><header><span class="when">${fmt(c.date)}</span>${l ? `<span class="what">${l}</span>` : ''}<span class="count">${t('views')(items.length)} · ${t('renders')(c.n.length)}</span></header>
+        <div class="grid">${shown.join('')}</div>${rest > 0 ? `<button type="button" class="more" data-rest='${JSON.stringify(items.slice(12)).replace(/'/g, '&#39;')}'>${t('more')(rest)}</button>` : ''}</article>`;
+    }).join('');
+  }
+  bindThumbs(L);
+  L.querySelectorAll('.more').forEach(m => m.onclick = () => { m.previousElementSibling.insertAdjacentHTML('beforeend', JSON.parse(m.dataset.rest).join('')); bindThumbs(m.previousElementSibling); m.remove(); });
+}
+function bindThumbs(root){
+  root.querySelectorAll('.thumb:not([data-bound])').forEach(b => { b.dataset.bound = 1; b.onclick = () => { const vi = +b.dataset.b; open(b.dataset.file, Math.max(0, vi - 1), vi); }; });
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; renderList(); writeHash(); });
+
+// ---- language
+function applyLang(l){
+  lang = l; document.documentElement.lang = l;
+  try { localStorage.setItem('lang', l); } catch (e) {}
+  document.querySelectorAll('.langtoggle button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lang === l));
+  document.querySelectorAll('[data-t]').forEach(el => { const v = t(el.dataset.t); if (typeof v === 'string') el.textContent = v; });
+  document.title = t('title') + (D.name ? ' · ' + D.name : '');
+  renderList(); renderCompare();
+}
+document.querySelectorAll('.langtoggle button').forEach(b => b.onclick = () => applyLang(b.dataset.lang));
+readHash();
+applyLang(lang);
+</script>
+</body>
+</html>

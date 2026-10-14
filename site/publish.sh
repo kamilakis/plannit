@@ -226,6 +226,12 @@ mkdir -p "$STAGE/options"
 cp -a "$PROJ/options/." "$STAGE/options/"
 [ -f "$PROJ/options/INDEX.md" ] && python3 "$SITE/md2html.py" "$PROJ/options/INDEX.md" "$STAGE/options/index.html" "${NAME:-} - options"
 fi
+# the render history (/history/): every committed version of every render, compared two at a time. Built from
+# the project's git history of content/presentation/; the resized copies are cached, so only new renders cost time.
+if [ -d "$PRES" ] && git -C "$PROJ" rev-parse --git-dir >/dev/null 2>&1; then
+echo "== render history"
+python3 "$SITE/history/build.py" "$PROJ" "$STAGE/history" "${NAME:-}" || echo "!! render history failed"
+fi
 if [ "$SITE_HOME" = presentation ] && [ -d "$PRES" ]; then
 cat > "$STAGE/index.html" <<EOF
 <!doctype html><meta charset="utf-8"><title>${NAME:-site}</title>
@@ -303,6 +309,7 @@ echo "  $SITE_URL/                playbook"
 fi
 echo "  $SITE_URL/presentation/   renders page"
 [ -d "$STAGE/options" ] && echo "  $SITE_URL/options/        design alternatives (sketches)"
+[ -d "$STAGE/history" ] && echo "  $SITE_URL/history/        render history (every version, compared)"
 [ -n "$PREVIEW_REL" ] && echo "  $SITE_URL/$PREVIEW_REL/   preview: not live on the presentation page yet"
 echo "  $SITE_URL/viewer/         3D viewer"
 echo "  $SITE_URL/viewer/artifact.html   the filled page to paste into the Artifact"
