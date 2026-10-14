@@ -148,6 +148,21 @@ A1="${SHEETS_ASBUILT%% *}"
 # Staleness is handled per image now: engine/blender/build.py fingerprints every view and render-hashes.json (merged at
 # --collect) records what each image in renders-final was rendered from — see "Rendering only what changed".
 linkfix "$STAGE/presentation/index.html"
+# "updated <date>": a <time data-updated> in the page gets the date of the newest commit touching content/presentation/
+# (today if it has uncommitted changes), in English and, through data-el, Greek. Hand-typed, it said 17 Sep for a month.
+python3 - "$STAGE/presentation/index.html" "$PROJ" <<'PY'
+import datetime, re, subprocess, sys
+page, proj = sys.argv[1:]
+dirty = subprocess.run(['git', '-C', proj, 'status', '--porcelain', '--', 'content/presentation'], capture_output=True, text=True).stdout.strip()
+last = subprocess.run(['git', '-C', proj, 'log', '-1', '--format=%cs', '--', 'content/presentation'], capture_output=True, text=True).stdout.strip()
+d = datetime.date.today() if dirty or not last else datetime.date.fromisoformat(last)
+el = 'Ιαν Φεβ Μαρ Απρ Μαΐ Ιουν Ιουλ Αυγ Σεπ Οκτ Νοε Δεκ'.split()[d.month - 1]
+tag = f'<time data-updated datetime="{d.isoformat()}" data-el="{d.day} {el} {d.year}">{d.day} {d.strftime("%b")} {d.year}</time>'
+s = open(page, encoding='utf-8').read()
+s, n = re.subn(r'<time data-updated[^>]*>[^<]*</time>', tag, s)
+open(page, 'w', encoding='utf-8').write(s)
+print(f'   updated-date: {d.isoformat()}' if n else '   (no <time data-updated> in the page)')
+PY
 # The Engineer and Contractor tabs are live now; the preview step above only runs when the source
 # marks something as not-yet-live.
 python3 "$SITE/page-variants.py" live "$STAGE/presentation/index.html" "$STAGE/presentation/index.html"

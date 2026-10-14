@@ -141,7 +141,7 @@ const T = {
        day:'Day', night:'Night', furn:'Furnished', empty:'Empty', newv:'new view', foot:'Images here are 1600 px copies; the full ones are on the presentation page.'}
 };
 let lang = 'el';
-try { if (localStorage.getItem('lang') === 'en') lang = 'en'; } catch (e) {}
+try { if (localStorage.getItem('kamihome-lang2') === 'en') lang = 'en'; } catch (e) {}
 const t = k => T[lang][k];
 const fmt = iso => new Date(iso).toLocaleString(lang === 'el' ? 'el-GR' : 'en-GB', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false});
 const stepLabel = c => (lang === 'el' ? c.el : c.en) || '';
@@ -287,7 +287,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab
 // ---- language
 function applyLang(l){
   lang = l; document.documentElement.lang = l;
-  try { localStorage.setItem('lang', l); } catch (e) {}
+  try { localStorage.setItem('kamihome-lang2', l); } catch (e) {}
   document.querySelectorAll('.langtoggle button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lang === l));
   document.querySelectorAll('[data-t]').forEach(el => { const v = t(el.dataset.t); if (typeof v === 'string') el.textContent = v; });
   document.title = t('title') + (D.name ? ' · ' + D.name : '');
