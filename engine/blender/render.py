@@ -150,7 +150,13 @@ def run(views):
     cy = settings()
     if MODE == 'glb': export_glb()
     if MODE == 'svg': model_dump()
-    CAMERAS = {k: {n: camera(n, **v) for n, v in vs.items()} for k, vs in views.CAMERAS.items()}['interior' if MODE == 'night' else MODE]
+    _set = 'interior' if MODE == 'night' else MODE
+    CAMERAS = {k: {n: camera(n, **{a: b for a, b in v.items() if a != 'tags'}) for n, v in vs.items()}
+               for k, vs in views.CAMERAS.items()}[_set]
+    # per-camera variants (16 Oct): a camera's tags=('t',) shows the objects named 'only:t/…' and hides those named
+    # 'not:t/…'; every other camera does the opposite. E.g. a door drawn open in one view and shut in the rest.
+    TAGS = {n: set(v.get('tags', ())) for n, v in views.CAMERAS.get(_set, {}).items()}
+    _VARIANTS = [(o, o.name.split('/')[0].split(':')) for o in bpy.data.objects if o.name.startswith(('only:', 'not:'))]
     NIGHT_EV = float(os.environ.get('NIGHT_EV', getattr(views, 'NIGHT_EV', -1.0)))   # env, else the project's views, else -1
     os.makedirs(OUT, exist_ok=True)
     # ---- render only what changed (2026-09-25). Each image gets a fingerprint of everything that can show
@@ -270,6 +276,7 @@ def run(views):
                    for p, g in zip(pts, grid))
     for name, (cam, expo, res) in CAMERAS.items():
         if CAMS != 'all' and name not in CAMS.split(','): continue
+        for o, (kind, tag) in _VARIANTS: o.hide_render = (tag in TAGS.get(name, ())) == (kind == 'not')
         S.camera = cam; S.view_settings.exposure = expo + (NIGHT_EV if MODE == 'night' else 0.0)
         if res: S.render.resolution_x, S.render.resolution_y = res
         else: S.render.resolution_x, S.render.resolution_y = 1600, 1000
@@ -279,7 +286,7 @@ def run(views):
         _vis = sorted([sig for sig, cs, c, ob in _OBJ if _sees(cam, cs, c, ob)] +
                       [sig for sig, lp, grid in _LAMPS if _lamp_seen(cam, lp, grid)])
         fp = _h(_GSIG, _val(cam.matrix_world), cd.type, cd.lens, cd.ortho_scale, S.view_settings.exposure,
-                S.render.resolution_x, S.render.resolution_y, _vis)
+                S.render.resolution_x, S.render.resolution_y, _vis, *sorted(TAGS.get(name, ())))
         _NEW[img] = fp
         if os.path.exists(os.path.join(_HERE, 'HASHDEBUG')):     # which objects (by name) and lamps (by place) the view counts
             _nm = {sig: ob.name for sig, cs, c, ob in _OBJ}; _nm.update({sig: 'lamp@' + str(_val(lp)) for sig, lp, g in _LAMPS})

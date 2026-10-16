@@ -15,6 +15,7 @@ def box(x0, x1, z0, z1, h0, h1, m, bevel=0.0, seg=3, name='box'):
     # is the exception: a window whose sill sits just under the cut has to survive, or the opening
     # disappears and the wall renders solid — which is exactly how the kitchen window (sill 1.29) went
     # missing from the plan. For glass, drop only if it is genuinely above the cut.
+    if name.startswith('only:') and not INTERIOR: return None   # a per-camera variant (render.run): eye-level views only
     if not (UNCUT and name.startswith(UNCUT)):  # views.UNCUT: shapes this mode keeps whole above the cut
         if MODE in ('cutaway', 'plan', 'glb') and h0 >= (CUT if name == 'glass' else CUT - 0.2): return None
         h1 = min(h1, CUT)
