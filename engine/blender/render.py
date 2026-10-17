@@ -148,6 +148,12 @@ def run(views):
     """Everything after the model is built: world, settings, then the mode — an export, or the renders."""
     world(views.SKY, views.SUN)
     cy = settings()
+    # 17 Oct: a project may white-balance its renders (views.WHITE_BALANCE = (kelvin, tint)): the light it treats as white.
+    # Warm 2700 K LEDs and a low afternoon sun otherwise tint every material toward peach.
+    _WB = getattr(views, 'WHITE_BALANCE', None)
+    if _WB:
+        S.view_settings.use_white_balance = True
+        S.view_settings.white_balance_temperature, S.view_settings.white_balance_tint = _WB
     if MODE == 'glb': export_glb()
     if MODE == 'svg': model_dump()
     _set = 'interior' if MODE == 'night' else MODE
@@ -206,6 +212,7 @@ def run(views):
     _GLOBAL = [MODE, PALETTE, SAMPLES, PCT, CUT, NIGHT_EV, S.world.name if S.world else '']
     _GLOBAL += [S.view_settings.view_transform, S.view_settings.look, cy.max_bounces, cy.diffuse_bounces, cy.glossy_bounces,
                 cy.transmission_bounces, cy.use_denoising, cy.denoiser, getattr(cy, 'adaptive_threshold', 0), S.render.resolution_percentage]
+    if _WB: _GLOBAL += ['wb', *_WB]                # only when set, so projects without it keep their fingerprints
     if S.world and S.world.node_tree:
         _GLOBAL += [(n.bl_idname, [_val(i.default_value) for i in n.inputs if hasattr(i, 'default_value')]) for n in S.world.node_tree.nodes]
     # Lights (12 Oct): only the sun lights the whole flat. A lamp counts toward a view if some point of the space it
