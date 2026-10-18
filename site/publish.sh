@@ -92,7 +92,7 @@ PY
   # had one) lands in renders-final and 404s on the page, because this loop only saw the old files.
   for f in "$PRES"/*.jpg; do
     n="$(basename "$f" .jpg)"; n="${n%_empty}"; n="${n%_night}"; n="${n%_b}"; n="${n%_d}"
-    for v in "$n" "${n}_night" "${n}_b" "${n}_b_night" "${n}_d" "${n}_d_night" "${n}_empty"; do   # palettes A, B, D; the empty flat (8 Oct)
+    for v in "$n" "${n}_night" "${n}_b" "${n}_b_night" "${n}_d" "${n}_d_night" "${n}_empty" "${n}_d_empty"; do   # palettes A, B, D; the empty flat (8 Oct; in D too, 18 Oct)
       [ -f "$FINAL/$v.jpg" ] && cp -f "$FINAL/$v.jpg" "$PRES/$v.jpg"
     done
   done
