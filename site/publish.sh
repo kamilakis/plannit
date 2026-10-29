@@ -274,6 +274,16 @@ for n in $SHEETS_PROPOSAL; do for f in "$RENDERS/$n".{dxf,pdf,png,svg}; do
   [ -f "$f" ] && cp -f "$f" "$STAGE/cad/"
 done
 done
+# the DETAIL sheets (29 Oct: a kitchen, a window schedule …), A3 landscape, from the project's details.py
+if [ -n "${SHEETS_DETAIL:-}" ]; then
+  ( cd "$RENDERS" && PLANNIT_PROJECT="$PROJ" python3 "$HERE/engine/detail_sheet.py" >/dev/null \
+    && for n in $SHEETS_DETAIL; do
+         python3 "$HERE/engine/print_pdf.py" $n.svg $n.pdf 420 297 && pdftoppm -png -r 110 -singlefile $n.pdf $n || exit 1
+       done ) || echo "!! detail sheets failed"
+  for n in $SHEETS_DETAIL; do for f in "$RENDERS/$n".{dxf,pdf,png,svg}; do
+    [ -f "$f" ] && cp -f "$f" "$STAGE/cad/"
+  done; done
+fi
 
 echo "== drafts (tmp/ — throwaway previews, deleted by the next publish)"
 # Drafts live in tmp/ as dated folders, each with its own index.html. They are staged under /drafts/
