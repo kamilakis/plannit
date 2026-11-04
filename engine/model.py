@@ -57,7 +57,7 @@ def walls(X, P):
             continue
         # a bricked-up opening: the wall in pieces, the old opening as 'infill'
         ax = along_x(X, wid); lo = x0 if ax else z0; hi = x1 if ax else z1
-        edges = sorted([lo, hi] + [u for ab in infill for u in ab])
+        edges = sorted([lo, hi] + [min(max(u, lo), hi) for ab in infill for u in ab])   # an old opening past a resized end stays gone
         for u0, u1 in zip(edges, edges[1:]):
             if u1 - u0 < 1e-4: continue
             tag = 'infill' if any(abs(u0 - a) < 1e-6 for a, _ in infill) else 'old'
