@@ -285,6 +285,9 @@ if [ -n "${SHEETS_DETAIL:-}" ]; then
   done; done
 fi
 
+# 10 Nov: /cad/ as a page, its sheets grouped by category (the project's cad.json), not nginx's bare listing
+[ -f "$PROJ/cad.json" ] && python3 "$HERE/site/cad-index.py" "$PROJ" "$STAGE/cad"
+
 echo "== drafts (tmp/ — throwaway previews, deleted by the next publish)"
 # Drafts live in tmp/ as dated folders, each with its own index.html. They are staged under /drafts/
 # so the owner can look at a proposal in a browser instead of hunting through the repo — and because
