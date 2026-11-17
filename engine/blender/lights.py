@@ -48,3 +48,33 @@ def ceiling_fixture(x0, x1, z0, z1, watts=50, night=False):
     box(x0 - 0.05, x1 + 0.05, z0 - 0.05, z1 + 0.05, CEIL - 0.10, CEIL, 'black', name='light_body')
     box(x0, x1, z0, z1, CEIL - 0.105, CEIL - 0.098, 'downlight' if lit(night) else 'white_matte', name='light_panel')
     led(x0, x1, z0, z1, CEIL - 0.12, watts, 'down', night=night)
+
+
+def portals(walls, openings, inset=0.01):
+    """Cycles light portals (17 Nov) in every window and glazed door of the envelope (walls tagged 'old', kinds window /
+    sliding / glazed), facing into the flat: they tell the renderer where the sky comes in, so day interiors clear
+    their noise in fewer samples. They add no light and are invisible. 'In' = toward the centre of the envelope's
+    walls. Off in the night scene (no sky to guide). Returns how many were made."""
+    if not INTERIOR or MODE == 'night': return 0
+    old = [w for w in walls if w[4] == 'old']
+    if not old: return 0
+    cx = (min(w[0] for w in old) + max(w[1] for w in old)) / 2; cz = (min(w[2] for w in old) + max(w[3] for w in old)) / 2
+    k = 0
+    for x0, x1, z0, z1, along_x, a, b, sill, head, kind, _new, tag in openings:
+        if tag != 'old' or kind not in ('window', 'sliding', 'glazed'): continue
+        L = bpy.data.lights.new('portal', 'AREA'); L.shape = 'RECTANGLE'
+        try: L.cycles.is_portal = True
+        except AttributeError: bpy.data.lights.remove(L); return k      # a Blender without portals: nothing lost
+        h = (sill + head) / 2
+        if along_x:                                   # the wall runs along x: the portal faces +z or -z (plan)
+            south = cz > (z0 + z1) / 2
+            z = (z1 + inset) if south else (z0 - inset)
+            loc, rot = ((a + b) / 2, -z, h), ((-math.pi / 2, 0, 0) if south else (math.pi / 2, 0, 0))
+            L.size, L.size_y = b - a, head - sill
+        else:                                         # the wall runs along z: the portal faces +x or -x
+            east = cx > (x0 + x1) / 2
+            x = (x1 + inset) if east else (x0 - inset)
+            loc, rot = (x, -(a + b) / 2, h), ((0, -math.pi / 2, 0) if east else (0, math.pi / 2, 0))
+            L.size, L.size_y = head - sill, b - a
+        o = link(bpy.data.objects.new('portal', L)); o.location = loc; o.rotation_euler = rot; k += 1
+    return k

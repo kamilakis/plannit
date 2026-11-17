@@ -2,7 +2,7 @@
 import math
 from mathutils import Vector
 from .ctx import MODE, INTERIOR, CEIL, CUT, FURNISHED
-from .materials import M, mat, srgb, BOOKC, image_mat, glass_matte
+from .materials import M, mat, srgb, BOOKC, image_mat, glass_matte, pbr_detail
 from .geometry import box, cyl, sphere, disc, wall, window_frame, rod, floor, ceiling, rbox, link, image_panel
 from .fittings import curtain, blind, shell, room_floors, tread, flight
 from .lights import LIGHTS, WARM, pointlight, led, ceiling_light, ceiling_fixture, lit

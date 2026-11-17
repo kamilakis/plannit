@@ -132,3 +132,52 @@ def library():
     if MODE == 'night' and NIGHT_LIGHTS == 'tagged':      # a sleeping flat: the luminaires' own glow goes out too
         for n in ('downlight', 'led_soft', 'led_warm', 'led_dim', 'bulb'):
             if n in M: M[n].node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = 0.0
+
+
+def pbr_detail(name, folder, size, strength=1.0, normal=0.4, rough=0.15, rot=0.0, blend=0.25):
+    """Real-material detail on an existing material (17 Nov): a scanned PBR set (diffuse, OpenGL normal, roughness —
+    e.g. a Poly Haven texture in the project's assets/textures/<id>/) projected onto every face (box projection,
+    object coordinates = plan metres), `size` metres per tile, rotated `rot` degrees about the vertical.
+    The material KEEPS ITS COLOUR: the diffuse map is divided by its own mean, so it only adds grain, weave and
+    tone variation round the palette colour (strength 0..1). normal = bump strength; rough = ± spread round the
+    material's roughness. Images are relative to the project folder; the farm's pack.sh ships assets/."""
+    import os, glob, math
+    import numpy as np
+    from . import ctx
+    if name not in M: return None
+    m = M[name]; nt = m.node_tree; P = nt.nodes['Principled BSDF']
+    def img(pat, data):
+        f = sorted(glob.glob(os.path.join(ctx.PROJECT, folder, pat)))
+        if not f: return None
+        t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(f[0], check_existing=True)
+        if data: t.image.colorspace_settings.name = 'Non-Color'
+        t.projection = 'BOX'; t.projection_blend = blend; nt.links.new(mp.outputs['Vector'], t.inputs['Vector'])
+        return t
+    tc = nt.nodes.new('ShaderNodeTexCoord'); mp = nt.nodes.new('ShaderNodeMapping')
+    mp.inputs['Scale'].default_value = (1 / size,) * 3; mp.inputs['Rotation'].default_value = (0, 0, math.radians(rot))
+    nt.links.new(tc.outputs['Object'], mp.inputs['Vector'])
+    d = img('*_diff_*', False)
+    if d:
+        px = np.empty(len(d.image.pixels), dtype=np.float32); d.image.pixels.foreach_get(px)
+        rgb = px.reshape(-1, 4)[::7, :3]
+        lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4).mean(0)   # the shader sees linear
+        nrm = nt.nodes.new('ShaderNodeMix'); nrm.data_type = 'RGBA'; nrm.blend_type = 'MULTIPLY'; nrm.inputs['Factor'].default_value = 1.0
+        nt.links.new(d.outputs['Color'], nrm.inputs['A']); nrm.inputs['B'].default_value = (*(1 / max(c, 1e-3) for c in lin), 1)
+        det = nt.nodes.new('ShaderNodeMix'); det.data_type = 'RGBA'; det.inputs['Factor'].default_value = strength
+        det.inputs['A'].default_value = (1, 1, 1, 1); nt.links.new(nrm.outputs['Result'], det.inputs['B'])
+        out = nt.nodes.new('ShaderNodeMix'); out.data_type = 'RGBA'; out.blend_type = 'MULTIPLY'; out.inputs['Factor'].default_value = 1.0
+        bc = P.inputs['Base Color']
+        if bc.links: nt.links.new(bc.links[0].from_socket, out.inputs['A'])
+        else: out.inputs['A'].default_value = bc.default_value
+        nt.links.new(det.outputs['Result'], out.inputs['B']); nt.links.new(out.outputs['Result'], bc)
+    n = img('*_nor_gl_*', True)
+    if n and normal > 0 and not P.inputs['Normal'].links:
+        nm = nt.nodes.new('ShaderNodeNormalMap'); nm.inputs['Strength'].default_value = normal
+        nt.links.new(n.outputs['Color'], nm.inputs['Color']); nt.links.new(nm.outputs['Normal'], P.inputs['Normal'])
+    r = img('*_rough_*', True)
+    if r and rough > 0 and not P.inputs['Roughness'].links:
+        r0 = P.inputs['Roughness'].default_value
+        mr = nt.nodes.new('ShaderNodeMapRange'); nt.links.new(r.outputs['Color'], mr.inputs['Value'])
+        mr.inputs['To Min'].default_value, mr.inputs['To Max'].default_value = max(0.02, r0 - rough), min(1.0, r0 + rough)
+        nt.links.new(mr.outputs['Result'], P.inputs['Roughness'])
+    return m

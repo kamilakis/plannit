@@ -52,15 +52,22 @@ def settings():
     return cy
 
 
-def camera(name, pos, tgt, lens=20, exposure=0.0, ortho=None, res=None, topdown=False, night_ev=0.0):
+def camera(name, pos, tgt, lens=20, exposure=0.0, ortho=None, res=None, topdown=False, night_ev=0.0, level=False):
     """topdown: looks straight down, unrotated (a plan view), instead of aiming at tgt.
-    night_ev: an exposure offset for this camera in the night renders only (e.g. darker small pale rooms)."""
+    night_ev: an exposure offset for this camera in the night renders only (e.g. darker small pale rooms).
+    level (17 Nov; views.LEVEL_CAMERAS or per camera): an architectural photographer's camera — held level, so
+    verticals stay vertical, with the lens shifted up or down to keep tgt where the tilted camera put it (the
+    frame's centre). A perspective camera only; a near-vertical aim (more than 60°) is left tilted."""
     if MODE == 'night': exposure += night_ev
     c = bpy.data.cameras.new(name); c.lens = lens; c.clip_start = 0.05
     if ortho: c.type = 'ORTHO'; c.ortho_scale = ortho
     o = link(bpy.data.objects.new(name, c))
     p = Vector((pos[0], -pos[1], pos[2])); t = Vector((tgt[0], -tgt[1], tgt[2]))
-    o.location = p; o.rotation_euler = (0, 0, 0) if topdown else (t - p).to_track_quat('-Z', 'Y').to_euler()
+    d = t - p; dh = math.hypot(d.x, d.y)
+    if level and not ortho and not topdown and dh > 1e-6 and abs(d.z) / dh < math.tan(math.radians(60)):
+        c.shift_y = (d.z / dh) * lens / c.sensor_width     # shift is in units of the frame's larger side (the width)
+        d = Vector((d.x, d.y, 0.0))
+    o.location = p; o.rotation_euler = (0, 0, 0) if topdown else d.to_track_quat('-Z', 'Y').to_euler()
     return (o, exposure, res)
 
 
@@ -157,8 +164,13 @@ def run(views):
     if MODE == 'glb': export_glb()
     if MODE == 'svg': model_dump()
     _set = 'interior' if MODE == 'night' else MODE
-    CAMERAS = {k: {n: camera(n, **{a: b for a, b in v.items() if a != 'tags'}) for n, v in vs.items()}
+    _LEVEL = getattr(views, 'LEVEL_CAMERAS', False)
+    CAMERAS = {k: {n: camera(n, **{'level': _LEVEL, **{a: b for a, b in v.items() if a != 'tags'}}) for n, v in vs.items()}
                for k, vs in views.CAMERAS.items()}[_set]
+    # 17 Nov: light portals in the envelope's windows (views.PORTALS), day interiors only — less noise per sample
+    if getattr(views, 'PORTALS', False):
+        from .lights import portals
+        print('portals:', portals(ctx.WALLS, ctx.OPENINGS), flush=True)
     # per-camera variants (16 Oct): a camera's tags=('t',) shows the objects named 'only:t/…' and hides those named
     # 'not:t/…'; every other camera does the opposite. E.g. a door drawn open in one view and shut in the rest.
     TAGS = {n: set(v.get('tags', ())) for n, v in views.CAMERAS.get(_set, {}).items()}
@@ -293,7 +305,8 @@ def run(views):
         _vis = sorted([sig for sig, cs, c, ob in _OBJ if _sees(cam, cs, c, ob)] +
                       [sig for sig, lp, grid in _LAMPS if _lamp_seen(cam, lp, grid)])
         fp = _h(_GSIG, _val(cam.matrix_world), cd.type, cd.lens, cd.ortho_scale, S.view_settings.exposure,
-                S.render.resolution_x, S.render.resolution_y, _vis, *sorted(TAGS.get(name, ())))
+                S.render.resolution_x, S.render.resolution_y, _vis, *sorted(TAGS.get(name, ())),
+                *(['shift', _val(cd.shift_y)] if cd.shift_y else []))      # only when shifted: older hashes stay valid
         _NEW[img] = fp
         if os.path.exists(os.path.join(_HERE, 'HASHDEBUG')):     # which objects (by name) and lamps (by place) the view counts
             _nm = {sig: ob.name for sig, cs, c, ob in _OBJ}; _nm.update({sig: 'lamp@' + str(_val(lp)) for sig, lp, g in _LAMPS})
