@@ -3,6 +3,7 @@
 
     polyhaven-get <project> model   <id> [res]   -> assets/models/<id>/<id>_<res>.gltf + .bin + textures/
     polyhaven-get <project> texture <id> [res]   -> assets/textures/<id>/<id>_{diff,nor_gl,rough}_<res>.jpg
+    polyhaven-get <project> hdri    <id> [res]   -> assets/hdri/<id>_<res>.hdr (4k default; views.BACKDROP)
 res: 1k (default for models), 2k (default for textures). Files already there are skipped. Stdlib only.
 The scene loads them with engine.blender.api prop() (models) and pbr_detail() (textures)."""
 import json, os, sys, urllib.request
@@ -24,5 +25,8 @@ elif kind == 'texture':
     d = os.path.join(proj, 'assets', 'textures', aid)
     for k in ('Diffuse', 'nor_gl', 'Rough'):
         u = files[k][res]['jpg']['url']; n += save(u, os.path.join(d, os.path.basename(u)))
-else: sys.exit('kind: model | texture')
+elif kind == 'hdri':
+    res = sys.argv[4] if len(sys.argv) > 4 else '4k'
+    u = files['hdri'][res]['hdr']['url']; d = os.path.join(proj, 'assets', 'hdri'); n += save(u, os.path.join(d, os.path.basename(u)))
+else: sys.exit('kind: model | texture | hdri')
 print(f'{aid}: {n / 1e6:.1f} MB downloaded into {d}')

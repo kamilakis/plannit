@@ -9,7 +9,7 @@ from .geometry import COL, link
 S = bpy.context.scene
 
 
-def world(sky_p, sun_p):
+def world(sky_p, sun_p, backdrop=None):
     """Nishita sky + a sun. sky_p: elevation, rotation (deg), altitude, air, dust, strength, night (RGB);
     sun_p: azimuth (compass deg), elevation (deg), energy, angle (deg), color. Compass -> Blender:
     true north = +X, true east = -Y (plan +z)."""
@@ -28,6 +28,70 @@ def world(sky_p, sun_p):
     to_sun = Vector((math.cos(az) * math.cos(el), -math.sin(az) * math.cos(el), math.sin(el)))
     sky.sun_rotation = math.atan2(to_sun.x, to_sun.y)
     so.rotation_euler = to_sun.to_track_quat('Z', 'Y').to_euler()
+    # 17 Nov: a photographed backdrop (views.BACKDROP = dict(path=, strength=, rotation= deg)): an HDRI the CAMERA sees
+    # through the windows and the glossy surfaces reflect, while the light in the rooms still comes from the Nishita
+    # sky and the sun above (any ray that has already bounced off a diffuse surface sees the sky, not the photo).
+    if backdrop and MODE != 'night':
+        env = nt.nodes.new('ShaderNodeTexEnvironment')
+        env.image = bpy.data.images.load(os.path.join(PROJECT, backdrop['path']), check_existing=True)
+        tc = nt.nodes.new('ShaderNodeTexCoord'); mp = nt.nodes.new('ShaderNodeMapping')
+        mp.inputs['Rotation'].default_value = (0, 0, math.radians(backdrop.get('rotation', 0.0)))
+        nt.links.new(tc.outputs['Generated'], mp.inputs['Vector']); nt.links.new(mp.outputs['Vector'], env.inputs['Vector'])
+        bg2 = nt.nodes.new('ShaderNodeBackground'); bg2.inputs['Strength'].default_value = backdrop.get('strength', 1.0)
+        nt.links.new(env.outputs['Color'], bg2.inputs['Color'])
+        lp = nt.nodes.new('ShaderNodeLightPath'); gt = nt.nodes.new('ShaderNodeMath'); gt.operation = 'GREATER_THAN'
+        gt.inputs[1].default_value = 0.5; nt.links.new(lp.outputs['Diffuse Depth'], gt.inputs[0])
+        mx = nt.nodes.new('ShaderNodeMixShader'); nt.links.new(gt.outputs[0], mx.inputs['Fac'])
+        nt.links.new(bg2.outputs[0], mx.inputs[1]); nt.links.new(bg.outputs[0], mx.inputs[2])
+        out = nt.nodes['World Output']; nt.links.new(mx.outputs[0], out.inputs['Surface'])
+
+
+def soft_edges(radius, skip=()):
+    """17 Nov: no knife-sharp edges — a Bevel shader node on every Principled material (render-time rounding of the
+    shading normal, no geometry change) except the names in `skip` (walls/ceilings/floors are built from coplanar
+    pieces whose seams a bevel would draw). Chains in front of any normal map already there."""
+    for m in bpy.data.materials:
+        if m.name in skip or not m.use_nodes or not m.node_tree: continue
+        nt = m.node_tree
+        for P in [n for n in nt.nodes if n.bl_idname == 'ShaderNodeBsdfPrincipled']:
+            b = nt.nodes.new('ShaderNodeBevel'); b.samples = 4; b.inputs['Radius'].default_value = radius
+            if P.inputs['Normal'].links: nt.links.new(P.inputs['Normal'].links[0].from_socket, b.inputs['Normal'])
+            nt.links.new(b.outputs['Normal'], P.inputs['Normal'])
+
+
+def _set(node, name, value, attr=None):
+    if name in node.inputs: node.inputs[name].default_value = value
+    else: setattr(node, attr or name.lower(), value)
+
+def finish(f):
+    """17 Nov: a camera's finish in the compositor (views.FINISH): glare = a soft glow round the brightest spots (the
+    LED strips, the sky), dispersion = a trace of lens colour fringing at the frame's edges, vignette = how much the
+    corners darken (0..1)."""
+    S.use_nodes = True; nt = S.node_tree
+    rl = next(n for n in nt.nodes if n.bl_idname == 'CompositorNodeRLayers')
+    comp = next(n for n in nt.nodes if n.bl_idname == 'CompositorNodeComposite')
+    src = rl.outputs['Image']
+    if f.get('glare'):
+        g = nt.nodes.new('CompositorNodeGlare'); g.glare_type = 'FOG_GLOW'
+        _set(g, 'Threshold', f.get('glare_threshold', 1.0)); _set(g, 'Size', 8 if 'Size' not in g.inputs else 0.5)
+        if 'Strength' in g.inputs: g.inputs['Strength'].default_value = f['glare']
+        else: g.mix = f['glare'] - 1.0                     # older API: mix -1 = image only .. 0 = half and half
+        nt.links.new(src, g.inputs['Image']); src = g.outputs['Image']
+    if f.get('dispersion'):
+        ld = nt.nodes.new('CompositorNodeLensdist'); _set(ld, 'Dispersion', f['dispersion'])
+        nt.links.new(src, ld.inputs['Image']); src = ld.outputs['Image']
+    if f.get('vignette'):
+        em = nt.nodes.new('CompositorNodeEllipseMask')
+        for k, v in (('Width', 1.1), ('Height', 1.1)): _set(em, k, v)
+        bl = nt.nodes.new('CompositorNodeBlur'); bl.filter_type = 'GAUSS'
+        if 'Size' in bl.inputs and not hasattr(bl, 'factor_x'): bl.inputs['Size'].default_value = (400, 400)
+        else: bl.use_relative = True; bl.factor_x = bl.factor_y = 30
+        nt.links.new(em.outputs['Mask'], bl.inputs['Image'])
+        mr = nt.nodes.new('CompositorNodeMapRange'); mr.inputs['To Min'].default_value = 1 - f['vignette']
+        nt.links.new(bl.outputs['Image'], mr.inputs['Value'])
+        mul = nt.nodes.new('CompositorNodeMixRGB'); mul.blend_type = 'MULTIPLY'
+        nt.links.new(src, mul.inputs[1]); nt.links.new(mr.outputs['Value'], mul.inputs[2]); src = mul.outputs['Image']
+    nt.links.new(src, comp.inputs['Image'])
 
 
 def settings():
@@ -52,7 +116,7 @@ def settings():
     return cy
 
 
-def camera(name, pos, tgt, lens=20, exposure=0.0, ortho=None, res=None, topdown=False, night_ev=0.0, level=False):
+def camera(name, pos, tgt, lens=20, exposure=0.0, ortho=None, res=None, topdown=False, night_ev=0.0, level=False, fstop=None):
     """topdown: looks straight down, unrotated (a plan view), instead of aiming at tgt.
     night_ev: an exposure offset for this camera in the night renders only (e.g. darker small pale rooms).
     level (17 Nov; views.LEVEL_CAMERAS or per camera): an architectural photographer's camera — held level, so
@@ -68,6 +132,8 @@ def camera(name, pos, tgt, lens=20, exposure=0.0, ortho=None, res=None, topdown=
         c.shift_y = (d.z / dh) * lens / c.sensor_width     # shift is in units of the frame's larger side (the width)
         d = Vector((d.x, d.y, 0.0))
     o.location = p; o.rotation_euler = (0, 0, 0) if topdown else d.to_track_quat('-Z', 'Y').to_euler()
+    if fstop and not ortho and not topdown:            # 17 Nov (views.DOF_FSTOP): a real lens's depth of field, focused on tgt
+        c.dof.use_dof = True; c.dof.focus_distance = (t - p).length; c.dof.aperture_fstop = fstop
     return (o, exposure, res)
 
 
@@ -153,8 +219,11 @@ def model_dump():
 
 def run(views):
     """Everything after the model is built: world, settings, then the mode — an export, or the renders."""
-    world(views.SKY, views.SUN)
+    world(views.SKY, views.SUN, getattr(views, 'BACKDROP', None))
     cy = settings()
+    if getattr(views, 'SOFT_EDGES', 0) and MODE in ('interior', 'night'):
+        soft_edges(views.SOFT_EDGES, getattr(views, 'SOFT_EDGES_SKIP', ()))
+    if getattr(views, 'FINISH', None) and MODE in ('interior', 'night'): finish(views.FINISH)
     # 17 Oct: a project may white-balance its renders (views.WHITE_BALANCE = (kelvin, tint)): the light it treats as white.
     # Warm 2700 K LEDs and a low afternoon sun otherwise tint every material toward peach.
     _WB = getattr(views, 'WHITE_BALANCE', None)
@@ -165,7 +234,8 @@ def run(views):
     if MODE == 'svg': model_dump()
     _set = 'interior' if MODE == 'night' else MODE
     _LEVEL = getattr(views, 'LEVEL_CAMERAS', False)
-    CAMERAS = {k: {n: camera(n, **{'level': _LEVEL, **{a: b for a, b in v.items() if a != 'tags'}}) for n, v in vs.items()}
+    _FSTOP = getattr(views, 'DOF_FSTOP', None) if MODE in ('interior', 'night') else None
+    CAMERAS = {k: {n: camera(n, **{'level': _LEVEL, 'fstop': _FSTOP, **{a: b for a, b in v.items() if a != 'tags'}}) for n, v in vs.items()}
                for k, vs in views.CAMERAS.items()}[_set]
     # 17 Nov: light portals in the envelope's windows (views.PORTALS), day interiors only — less noise per sample
     if getattr(views, 'PORTALS', False):
@@ -225,6 +295,8 @@ def run(views):
     _GLOBAL += [S.view_settings.view_transform, S.view_settings.look, cy.max_bounces, cy.diffuse_bounces, cy.glossy_bounces,
                 cy.transmission_bounces, cy.use_denoising, cy.denoiser, getattr(cy, 'adaptive_threshold', 0), S.render.resolution_percentage]
     if _WB: _GLOBAL += ['wb', *_WB]                # only when set, so projects without it keep their fingerprints
+    for _k in ('BACKDROP', 'SOFT_EDGES', 'SOFT_EDGES_SKIP', 'FINISH', 'DOF_FSTOP'):   # 17 Nov, likewise only when set
+        if getattr(views, _k, None): _GLOBAL += [_k, repr(getattr(views, _k))]
     if S.world and S.world.node_tree:
         _GLOBAL += [(n.bl_idname, [_val(i.default_value) for i in n.inputs if hasattr(i, 'default_value')]) for n in S.world.node_tree.nodes]
     # Lights (12 Oct): only the sun lights the whole flat. A lamp counts toward a view if some point of the space it
