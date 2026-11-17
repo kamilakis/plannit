@@ -134,13 +134,15 @@ def library():
             if n in M: M[n].node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = 0.0
 
 
-def pbr_detail(name, folder, size, strength=1.0, normal=0.4, rough=0.15, rot=0.0, blend=0.25):
+def pbr_detail(name, folder, size, strength=1.0, normal=0.4, rough=0.15, rot=0.0, blend=0.25, tint=None):
     """Real-material detail on an existing material (17 Nov): a scanned PBR set (diffuse, OpenGL normal, roughness —
     e.g. a Poly Haven texture in the project's assets/textures/<id>/) projected onto every face (box projection,
     object coordinates = plan metres), `size` metres per tile, rotated `rot` degrees about the vertical.
     The material KEEPS ITS COLOUR: the diffuse map is divided by its own mean, so it only adds grain, weave and
     tone variation round the palette colour (strength 0..1). normal = bump strength; rough = ± spread round the
-    material's roughness. Images are relative to the project folder; the farm's pack.sh ships assets/."""
+    material's roughness. Images are relative to the project folder; the farm's pack.sh ships assets/.
+    tint (sRGB hex, or 'planks' = the mean of a planks() material's two tones): REPLACE the material's own pattern
+    with the scan's, in that colour — e.g. a scanned plank floor instead of the drawn bricks."""
     import os, glob, math
     import numpy as np
     from . import ctx
@@ -167,7 +169,11 @@ def pbr_detail(name, folder, size, strength=1.0, normal=0.4, rough=0.15, rot=0.0
         det.inputs['A'].default_value = (1, 1, 1, 1); nt.links.new(nrm.outputs['Result'], det.inputs['B'])
         out = nt.nodes.new('ShaderNodeMix'); out.data_type = 'RGBA'; out.blend_type = 'MULTIPLY'; out.inputs['Factor'].default_value = 1.0
         bc = P.inputs['Base Color']
-        if bc.links: nt.links.new(bc.links[0].from_socket, out.inputs['A'])
+        if tint:
+            if tint == 'planks': c = [(a + b) / 2 for a, b in zip(srgb(PLANK_TONES[name][0]), srgb(PLANK_TONES[name][1]))]
+            else: c = srgb(tint)
+            out.inputs['A'].default_value = (*c, 1)
+        elif bc.links: nt.links.new(bc.links[0].from_socket, out.inputs['A'])
         else: out.inputs['A'].default_value = bc.default_value
         nt.links.new(det.outputs['Result'], out.inputs['B']); nt.links.new(out.outputs['Result'], bc)
     n = img('*_nor_gl_*', True)
