@@ -200,3 +200,38 @@ def hanging_egg_chair(cx, cz, face, shell='rattan', stand='black', cushion='line
     R = 0.55                                                                     # the foot: a C, open to the front
     ring = [(R * math.sin(a), post + R - R * math.cos(a)) for a in [math.radians(-135 + 270 * i / 18) for i in range(19)]]
     for (u0, v0), (u1, v1) in zip(ring, ring[1:]): rod(P(u0, v0, -H + 0.02), P(u1, v1, -H + 0.02), 0.025, stand)
+
+
+# ---- scanned props (17 Nov): real objects from Poly Haven (CC0), fetched with tools/polyhaven-get into the project's
+# assets/models/<id>/. Real-world scale as published; interior and night renders only (the cutaway, plan and glb
+# passes keep their simple shapes). Called inside loose_start()/loose_end() like any other loose item.
+_PROPS = {}
+def prop(asset, x, z, h, rot=0.0, scale=1.0, tilt=0.0):
+    """Place a glTF model from assets/models/<asset>/: the bottom centre of its bounding box at plan (x, z), height h;
+    rot = degrees about the vertical (plan: counter-clockwise seen from above), tilt = degrees about plan x (a lean).
+    Repeats share the mesh data of the first import. Returns the placing empty (None outside interior/night)."""
+    import glob, os
+    from . import ctx
+    if ctx.MODE not in ('interior', 'night'): return None
+    if asset not in _PROPS:
+        f = sorted(glob.glob(os.path.join(ctx.PROJECT, 'assets', 'models', asset, '*.gltf')))
+        if not f: raise SystemExit(f'prop: no assets/models/{asset}/*.gltf — run plannit/tools/polyhaven-get <project> model {asset}')
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=f[0], loglevel=50)
+        new = [o for o in bpy.data.objects if o not in before]
+        bpy.context.view_layer.update()
+        pts = [o.matrix_world @ __import__('mathutils').Vector(c) for o in new if o.type == 'MESH' for c in o.bound_box]
+        lo = [min(p[i] for p in pts) for i in range(3)]; hi = [max(p[i] for p in pts) for i in range(3)]
+        base = ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2])
+        meshes = [(o.data, o.matrix_world.copy()) for o in new if o.type == 'MESH']
+        for o in new: bpy.data.objects.remove(o, do_unlink=True)            # the template is kept as data only
+        _PROPS[asset] = (meshes, base)
+    meshes, base = _PROPS[asset]
+    from mathutils import Matrix
+    e = link(bpy.data.objects.new('prop:' + asset, None))
+    e.location = (x, -z, h); e.rotation_euler = (math.radians(tilt), 0, math.radians(rot)); e.scale = (scale,) * 3
+    off = Matrix.Translation((-base[0], -base[1], -base[2]))
+    for me, mw in meshes:
+        o = link(bpy.data.objects.new('prop:' + asset, me)); o.parent = e; o.matrix_parent_inverse = Matrix.Identity(4)
+        o.matrix_basis = off @ mw
+    return e
