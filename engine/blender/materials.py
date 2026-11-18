@@ -134,7 +134,7 @@ def library():
             if n in M: M[n].node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = 0.0
 
 
-def pbr_detail(name, folder, size, strength=1.0, normal=0.4, rough=0.15, rot=0.0, blend=0.25, tint=None):
+def pbr_detail(name, folder, size, strength=1.0, normal=0.4, rough=0.15, rot=0.0, blend=0.25, tint=None, contrast=1.0):
     """Real-material detail on an existing material (17 Nov): a scanned PBR set (diffuse, OpenGL normal, roughness —
     e.g. a Poly Haven texture in the project's assets/textures/<id>/) projected onto every face (box projection,
     object coordinates = plan metres), `size` metres per tile, rotated `rot` degrees about the vertical.
@@ -142,7 +142,9 @@ def pbr_detail(name, folder, size, strength=1.0, normal=0.4, rough=0.15, rot=0.0
     tone variation round the palette colour (strength 0..1). normal = bump strength; rough = ± spread round the
     material's roughness. Images are relative to the project folder; the farm's pack.sh ships assets/.
     tint (sRGB hex, or 'planks' = the mean of a planks() material's two tones): REPLACE the material's own pattern
-    with the scan's, in that colour — e.g. a scanned plank floor instead of the drawn bricks."""
+    with the scan's, in that colour — e.g. a scanned plank floor instead of the drawn bricks.
+    contrast: a power on the mean-normalised map (>1 deepens what is darker than the mean, e.g. marble veins that
+    a bright top would otherwise wash out; the mean stays about where it was)."""
     import os, glob, math
     import numpy as np
     from . import ctx
@@ -166,7 +168,11 @@ def pbr_detail(name, folder, size, strength=1.0, normal=0.4, rough=0.15, rot=0.0
         nrm = nt.nodes.new('ShaderNodeMix'); nrm.data_type = 'RGBA'; nrm.blend_type = 'MULTIPLY'; nrm.inputs['Factor'].default_value = 1.0
         nt.links.new(d.outputs['Color'], nrm.inputs['A']); nrm.inputs['B'].default_value = (*(1 / max(c, 1e-3) for c in lin), 1)
         det = nt.nodes.new('ShaderNodeMix'); det.data_type = 'RGBA'; det.inputs['Factor'].default_value = strength
-        det.inputs['A'].default_value = (1, 1, 1, 1); nt.links.new(nrm.outputs['Result'], det.inputs['B'])
+        det.inputs['A'].default_value = (1, 1, 1, 1); src = nrm.outputs['Result']
+        if contrast != 1.0:
+            gm = nt.nodes.new('ShaderNodeGamma'); gm.inputs['Gamma'].default_value = contrast
+            nt.links.new(src, gm.inputs['Color']); src = gm.outputs['Color']
+        nt.links.new(src, det.inputs['B'])
         out = nt.nodes.new('ShaderNodeMix'); out.data_type = 'RGBA'; out.blend_type = 'MULTIPLY'; out.inputs['Factor'].default_value = 1.0
         bc = P.inputs['Base Color']
         if tint:
