@@ -10,10 +10,14 @@ def pointlight(x, z, h, watts=35, radius=0.05, color=(1.0, 0.86, 0.7), spot=Fals
     o = link(bpy.data.objects.new('l', L)); o.location = (x, -z, h); LIGHTS.append(o); return o
 
 WARM = (1.0, 0.78, 0.55)     # ~2700-3000 K warm white
+# 24 Nov: an evening render lights only what the design marks between evening_on() and evening_on(False) — the
+# owner's own list of lights, not every lamp the design has gathered
+_EV = [False]
+def evening_on(on=True): _EV[0] = on
 def lit(night=False):
     """Is a light with this night tag on in this render? night: False = off in a 'tagged' night scene,
     True = on day and night, 'only' = a night light (motion-sensor path lights), off in the day renders."""
-    if MODE == 'night' and NIGHT_LIGHTS == 'evening': return night != 'only'     # ~22:00: all on, no dim copies
+    if MODE == 'night' and NIGHT_LIGHTS == 'evening': return _EV[0] and night != 'only'   # ~22:00: the marked ones, full
     if MODE == 'night': return NIGHT_LIGHTS != 'tagged' or bool(night)
     return night != 'only'
 
