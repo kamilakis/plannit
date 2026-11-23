@@ -368,6 +368,12 @@ def run(views):
     for name, (cam, expo, res) in CAMERAS.items():
         if CAMS != 'all' and name not in CAMS.split(','): continue
         for o, (kind, tag) in _VARIANTS: o.hide_render = (tag in TAGS.get(name, ())) == (kind == 'not')
+        # 23 Nov: the reserved tag 'lights_off' renders a camera by daylight alone — every lamp and LED out (the
+        # electrician's pictures); the sun and the window portals stay, so the daylight is unchanged. In the fingerprint as a tag.
+        # (every LIGHT object in the scene, not lights.LIGHTS: an empty flat deletes the loose ones, which that list still holds)
+        for o in bpy.data.objects:
+            if o.type == 'LIGHT' and o.data.type != 'SUN' and not getattr(o.data.cycles, 'is_portal', False):
+                o.hide_render = 'lights_off' in TAGS.get(name, ())
         S.camera = cam; S.view_settings.exposure = expo + (NIGHT_EV if MODE == 'night' else 0.0)
         if res: S.render.resolution_x, S.render.resolution_y = res
         else: S.render.resolution_x, S.render.resolution_y = 1600, 1000
