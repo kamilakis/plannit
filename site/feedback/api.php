@@ -1,5 +1,5 @@
 <?php
-// site/feedback/api.php: visitor notes for a plannit site (spec: the project's FEEDBACK-SPEC.md).
+// site/feedback/api.php: visitor notes for a plannit site (spec: the project's FEEDBACK-SPEC.md), and marks (below).
 //   POST  JSON {text, name?, image?, view?, pin?, page, lang?, website?}  -> {ok, id}
 //   GET   ?counts                                                        -> {"<image>": n, "_general": n}
 // Notes are appended to STORE/feedback.jsonl, outside the web root, and are never served back: the project's
@@ -26,6 +26,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['counts'])) {
     }
     out(200, (object)$n);
 }
+// ---- marks (23 Nov 2026): points placed on a page's images — e.g. switches and sockets for the electrician. Unlike
+// notes they are shown back, so whoever places them can check and remove them; only pages under MARK_PAGES take them.
+//   GET   ?marks&page=/electrician/                                           -> [{id, image, pin, type, height, text, time}]
+//   POST  JSON {mark: {type, height?, text?}, image, pin, page}              -> {ok, id}
+//   POST  JSON {unmark: id, page}                                            -> {ok}
+// STORE/marks.jsonl, append-only: {op: add|del, ...}; a del cancels its add.
+const MARK_PAGES = '#^/electrician/$#', MARK_TYPES = ['switch', 'socket', 'socket2', 'other'], MARKS_PER_HOUR = 400;
+function live_marks($page) {
+    $m = [];
+    foreach (lines(STORE . '/marks.jsonl') as $l) {
+        $r = json_decode($l, true); if (!$r || ($r['page'] ?? '') !== $page) continue;
+        if ($r['op'] === 'add') $m[$r['id']] = $r; elseif ($r['op'] === 'del') unset($m[$r['id']]);
+    }
+    return array_values(array_map(fn($r) => array_intersect_key($r, array_flip(['id', 'image', 'pin', 'type', 'height', 'text', 'time'])), $m));
+}
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['marks'])) {
+    $page = (string)($_GET['page'] ?? '');
+    if (!preg_match(MARK_PAGES, $page)) out(400, ['error' => 'bad page']);
+    out(200, live_marks($page));
+}
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') out(405, ['error' => 'POST a note, or GET ?counts']);
 
 $raw = file_get_contents('php://input', false, null, 0, 16384);
@@ -33,6 +53,38 @@ $in = json_decode($raw, true);
 if (!is_array($in)) out(400, ['error' => 'bad json']);
 if (!empty($in['website'])) out(200, ['ok' => true, 'id' => '']);          // the honeypot: bots fill it, people never see it
 
+if (isset($in['mark']) || isset($in['unmark'])) {
+    $page = is_string($in['page'] ?? null) ? $in['page'] : '';
+    if (!preg_match(MARK_PAGES, $page)) out(400, ['error' => 'bad page']);
+    $who = substr(hash('sha256', ($_SERVER['REMOTE_ADDR'] ?? '') . '|' . STORE), 0, 16);
+    $rl = fopen(STORE . '/ratelimit-marks.json', 'c+');
+    if (!$rl || !flock($rl, LOCK_EX)) out(500, ['error' => 'store unavailable']);
+    $seen = json_decode(stream_get_contents($rl) ?: '{}', true) ?: []; $now = time();
+    foreach ($seen as $k => $ts) { $seen[$k] = array_values(array_filter($ts, fn($t) => $t > $now - 3600)); if (!$seen[$k]) unset($seen[$k]); }
+    if (count($seen[$who] ?? []) >= MARKS_PER_HOUR) { flock($rl, LOCK_UN); out(429, ['error' => 'too many marks from here; try again in an hour']); }
+    $seen[$who][] = $now; ftruncate($rl, 0); rewind($rl); fwrite($rl, json_encode($seen)); fflush($rl); flock($rl, LOCK_UN); fclose($rl);
+    if (isset($in['unmark'])) {
+        $id = is_string($in['unmark']) ? $in['unmark'] : '';
+        if (!preg_match('/^[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$/', $id)) out(400, ['error' => 'bad id']);
+        $r = ['op' => 'del', 'id' => $id, 'page' => $page, 'time' => date('Y-m-d H:i:s', $now), 'from' => $who];
+    } else {
+        $mk = is_array($in['mark']) ? $in['mark'] : [];
+        $type = (string)($mk['type'] ?? '');
+        if (!in_array($type, MARK_TYPES, true)) out(400, ['error' => 'bad type']);
+        $image = is_string($in['image'] ?? null) ? $in['image'] : '';
+        if (!preg_match('/^[A-Za-z0-9_.-]+\.(jpg|jpeg|png|webp)$/', $image)) out(400, ['error' => 'bad image']);
+        $p = $in['pin'] ?? null;
+        if (!is_array($p) || count($p) !== 2 || !is_numeric($p[0]) || !is_numeric($p[1])) out(400, ['error' => 'bad pin']);
+        $str = fn($v, $max) => is_string($v) ? trim(mb_substr($v, 0, $max)) : '';
+        $r = ['op' => 'add', 'id' => date('Ymd-His', $now) . '-' . bin2hex(random_bytes(3)), 'page' => $page,
+              'image' => $image, 'pin' => [round(max(0, min(1, (float)$p[0])), 4), round(max(0, min(1, (float)$p[1])), 4)],
+              'type' => $type, 'height' => $str($mk['height'] ?? '', 20), 'text' => $str($mk['text'] ?? '', 300),
+              'time' => date('Y-m-d H:i:s', $now), 'from' => $who];
+    }
+    if (file_put_contents(STORE . '/marks.jsonl', json_encode($r, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n",
+                          FILE_APPEND | LOCK_EX) === false) out(500, ['error' => 'could not save']);
+    out(200, ['ok' => true, 'id' => $r['id']]);
+}
 $s = fn($k, $max) => is_string($in[$k] ?? null) ? trim(mb_substr($in[$k], 0, $max)) : '';
 $text = $s('text', MAX_TEXT + 1);
 if ($text === '') out(400, ['error' => 'empty note']);

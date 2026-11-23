@@ -235,6 +235,15 @@ cat >> "$STAGE/measure/index.html" <<EOF
 EOF
 fi
 
+# Static pages (23 Nov 2026): project.conf STATIC_PAGES="src=path ..." copies content/<src>/ to /<path>/ as it is —
+# e.g. a page that talks to the feedback API's marks (the electrician's switches and sockets).
+for sp in ${STATIC_PAGES:-}; do
+  src="${sp%%=*}"; dst="${sp#*=}"
+  [ -d "$PROJ/content/$src" ] || { echo "   STATIC_PAGES: no content/$src" >&2; continue; }
+  echo "== $dst (static page from content/$src)"
+  mkdir -p "$STAGE/$dst"; cp -a "$PROJ/content/$src/." "$STAGE/$dst/"
+done
+
 if [ -d "$PROJ/options" ]; then
 echo "== options (design alternatives: sketches + INDEX.md)"
 mkdir -p "$STAGE/options"

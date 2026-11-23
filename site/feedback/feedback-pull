@@ -78,6 +78,16 @@ def pull(proj, c):
                     f'if cmp -s "$t" "$f" || {{ [ ! -e "$f" ] && [ ! -s "$t" ]; }}; then rm -f "$t"; else mv "$t" "$f"; fi'],
                    input=hidden.encode(), check=False, timeout=60)
     if new: print(f'feedback-pull: {len(new)} new note(s)')
+    # marks (23 Nov 2026: points placed on a page's images, e.g. the electrician's switches and sockets): a plain
+    # mirror of the server's append-only log, next to the inbox; no messages — whoever places them is looking at them
+    r = subprocess.run(['ssh', '-o', 'BatchMode=yes', host, f'cat {shlex.quote(store)}/marks.jsonl 2>/dev/null; true'],
+                       capture_output=True, timeout=60)
+    if r.returncode == 0 and r.stdout.strip():
+        mk = os.path.join(os.path.dirname(inbox), 'marks.jsonl')
+        old = open(mk, 'rb').read() if os.path.exists(mk) else b''
+        if r.stdout != old:
+            open(mk + '.tmp', 'wb').write(r.stdout); os.replace(mk + '.tmp', mk)
+            print(f'feedback-pull: marks updated ({len(r.stdout.splitlines())} log lines)')
 
 
 def listing(proj, c):
