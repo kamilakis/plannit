@@ -365,6 +365,7 @@ def run(views):
         if not any(p.z > 0 and -0.2 < p.x < 1.2 and -0.2 < p.y < 1.2 for p in pts): return False
         return any(p.z > 0 and -0.2 < p.x < 1.2 and -0.2 < p.y < 1.2 and _unblocked(lp, g, None) and _unblocked(cl, g, None)
                    for p, g in zip(pts, grid))
+    _E0 = {}
     for name, (cam, expo, res) in CAMERAS.items():
         if CAMS != 'all' and name not in CAMS.split(','): continue
         for o, (kind, tag) in _VARIANTS: o.hide_render = (tag in TAGS.get(name, ())) == (kind == 'not')
@@ -374,6 +375,13 @@ def run(views):
         for o in bpy.data.objects:
             if o.type == 'LIGHT' and o.data.type != 'SUN' and not getattr(o.data.cycles, 'is_portal', False):
                 o.hide_render = 'lights_off' in TAGS.get(name, ())
+        # ... and the luminaires' own glow (mirror halo, downlight panels), as a 'tagged' night does (materials.py)
+        from .materials import M as _M
+        for _n in ('downlight', 'led_soft', 'led_warm', 'led_dim', 'bulb'):
+            if _n in _M:
+                _i = _M[_n].node_tree.nodes['Principled BSDF'].inputs['Emission Strength']
+                _E0.setdefault(_n, _i.default_value)
+                _i.default_value = 0.0 if 'lights_off' in TAGS.get(name, ()) else _E0[_n]
         S.camera = cam; S.view_settings.exposure = expo + (NIGHT_EV if MODE == 'night' else 0.0)
         if res: S.render.resolution_x, S.render.resolution_y = res
         else: S.render.resolution_x, S.render.resolution_y = 1600, 1000
