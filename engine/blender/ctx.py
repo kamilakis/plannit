@@ -43,3 +43,8 @@ def setup(argv, project, views, ceil):
     # the night scene: 'all' = every light on (the default), 'tagged' = only lights made with night=True / 'only'
     # (views.NIGHT_LIGHTS) — e.g. a sleeping flat with low path lights and the living room in movie mode
     NIGHT_LIGHTS = getattr(views, 'NIGHT_LIGHTS', 'all')
+    # 24 Nov: an evening (~22:00, owner): a file EVENING in the project folder (like UNFURNISHED) turns every ordinary
+    # light on, the hidden strips at full strength, and leaves the after-midnight copies (night='only') off. Night
+    # mode only; its images get an '_evening' suffix.
+    if MODE == 'night' and os.path.exists(os.path.join(PROJECT, 'EVENING')):
+        NIGHT_LIGHTS = 'evening'; SUFFIX += '_evening'

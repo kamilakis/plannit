@@ -13,6 +13,7 @@ WARM = (1.0, 0.78, 0.55)     # ~2700-3000 K warm white
 def lit(night=False):
     """Is a light with this night tag on in this render? night: False = off in a 'tagged' night scene,
     True = on day and night, 'only' = a night light (motion-sensor path lights), off in the day renders."""
+    if MODE == 'night' and NIGHT_LIGHTS == 'evening': return night != 'only'     # ~22:00: all on, no dim copies
     if MODE == 'night': return NIGHT_LIGHTS != 'tagged' or bool(night)
     return night != 'only'
 

@@ -372,16 +372,17 @@ def run(views):
         # 23 Nov: the reserved tag 'lights_off' renders a camera by daylight alone — every lamp and LED out (the
         # electrician's pictures); the sun and the window portals stay, so the daylight is unchanged. In the fingerprint as a tag.
         # (every LIGHT object in the scene, not lights.LIGHTS: an empty flat deletes the loose ones, which that list still holds)
+        _off = 'lights_off' in TAGS.get(name, ()) and MODE != 'night'      # 24 Nov: a night render lights them anyway
         for o in bpy.data.objects:
             if o.type == 'LIGHT' and o.data.type != 'SUN' and not getattr(o.data.cycles, 'is_portal', False):
-                o.hide_render = 'lights_off' in TAGS.get(name, ())
+                o.hide_render = _off
         # ... and the luminaires' own glow (mirror halo, downlight panels), as a 'tagged' night does (materials.py)
         from .materials import M as _M
         for _n in ('downlight', 'led_soft', 'led_warm', 'led_dim', 'bulb'):
             if _n in _M:
                 _i = _M[_n].node_tree.nodes['Principled BSDF'].inputs['Emission Strength']
                 _E0.setdefault(_n, _i.default_value)
-                _i.default_value = 0.0 if 'lights_off' in TAGS.get(name, ()) else _E0[_n]
+                _i.default_value = 0.0 if _off else _E0[_n]
         S.camera = cam; S.view_settings.exposure = expo + (NIGHT_EV if MODE == 'night' else 0.0)
         if res: S.render.resolution_x, S.render.resolution_y = res
         else: S.render.resolution_x, S.render.resolution_y = 1600, 1000
