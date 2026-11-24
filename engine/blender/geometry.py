@@ -35,7 +35,7 @@ def box(x0, x1, z0, z1, h0, h1, m, bevel=0.0, seg=3, name='box'):
         for p in me.polygons: p.use_smooth = True
     return o
 
-def soft(x0, x1, z0, z1, h0, h1, m, crown=0.025, r=0.035, wrinkle=0.004, name='cushion', crown_top=None, pillow=False, lean=0.0):
+def soft(x0, x1, z0, z1, h0, h1, m, crown=0.025, r=0.035, wrinkle=0.004, name='cushion', crown_top=None, pillow=False, lean=0.0, pinch=0.10, taper=0.25):
     """An upholstered cushion (24 Nov): a box() (same plan record, same cuts) made soft — its top and bottom domed by
     `crown` (m), its sides bulged by half that, its edges rounded by `r`, and a faint cloud displacement of `wrinkle`
     (m) for the give of filled fabric. `crown_top` overrides the top's dome (a back cushion's flatter top). Outside the
@@ -58,11 +58,11 @@ def soft(x0, x1, z0, z1, h0, h1, m, crown=0.025, r=0.035, wrinkle=0.004, name='c
             q = [(v.co.x - cx) / hx, (v.co.y - cy) / hy, (v.co.z - ch) / hh]
             a, b2 = [q[i] for i in range(3) if i != k]
             f = (max(1 - a * a, 0) * max(1 - b2 * b2, 0)) ** 0.5
-            v.co[k] = c0 + (v.co[k] - c0) * (0.25 + 0.75 * f)
+            v.co[k] = c0 + (v.co[k] - c0) * (taper + (1 - taper) * f)
             oi, oj = [i for i in range(3) if i != k]                           # the outline curves in between corners
             ci, cj = (cx, cy, ch)[oi], (cx, cy, ch)[oj]
-            v.co[oi] = ci + (v.co[oi] - ci) * (1 - 0.10 * max(1 - q[oj] * q[oj], 0))
-            v.co[oj] = cj + (v.co[oj] - cj) * (1 - 0.10 * max(1 - q[oi] * q[oi], 0))
+            v.co[oi] = ci + (v.co[oi] - ci) * (1 - pinch * max(1 - q[oj] * q[oj], 0))
+            v.co[oj] = cj + (v.co[oj] - cj) * (1 - pinch * max(1 - q[oi] * q[oi], 0))
             if lean and k != 2: v.co[k] += (lean if k == 0 else -lean) * (q[2] + 1) / 2   # plan z is Blender -y
     bm.to_mesh(o.data); bm.free()
     b = o.modifiers.new('bev', 'BEVEL'); b.width = min(r, hx * 0.9, hy * 0.9, hh * 0.9); b.segments = 3
