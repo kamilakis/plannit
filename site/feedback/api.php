@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['counts'])) {
 //   POST  JSON {mark: {type, height?, text?}, image, pin, page}              -> {ok, id}
 //   POST  JSON {unmark: id, page}                                            -> {ok}
 // STORE/marks.jsonl, append-only: {op: add|del, ...}; a del cancels its add.
-const MARK_PAGES = '#^/electrician/$#', MARK_TYPES = ['switch', 'socket', 'socket2', 'other'], MARKS_PER_HOUR = 400;
+const MARK_PAGES = '#^/electrician/$#', MARK_TYPES = ['switch', 'roller', 'socket', 'socket2', 'lan', 'other'], MARKS_PER_HOUR = 400;
 function live_marks($page) {
     $m = [];
     foreach (lines(STORE . '/marks.jsonl') as $l) {
