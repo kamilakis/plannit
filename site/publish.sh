@@ -327,6 +327,19 @@ for p in ${FEEDBACK_PAGES:-presentation playbook options}; do
 done
 fi
 
+# Auto-refresh (24 Nov 2026, owner: «opening the website as a web app, it doesn't refresh»): a home-screen web app
+# keeps its page in memory and never reloads it. Every publish writes /version.txt; every page carries the version
+# it was built with and, whenever it comes back to the screen (and every 5 minutes while shown), asks for
+# /version.txt past every cache — a different one means a newer publish, and the page reloads itself.
+VER=$(date +%Y%m%d%H%M%S)
+echo "$VER" > "$STAGE/version.txt"
+n=0
+while IFS= read -r -d '' f; do
+  printf '\n<script>(()=>{const v="%s";const chk=()=>fetch("/version.txt",{cache:"no-store"}).then(r=>r.ok?r.text():v).then(t=>{t=t.trim();if(t&&t!==v)location.reload()}).catch(()=>{});document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")chk()});addEventListener("pageshow",e=>{if(e.persisted)chk()});setInterval(()=>{if(document.visibilityState==="visible")chk()},300000)})();</script>\n' "$VER" >> "$f"
+  n=$((n + 1))
+done < <(find "$STAGE" -name index.html -not -path "$STAGE/drafts/*" -print0)
+echo "== auto-refresh: version $VER in $n pages"
+
 echo "== built $(du -sh "$STAGE" | cut -f1) in $STAGE"
 [ "$LOCAL" = 1 ] && { echo "(--local: not pushing)"; exit 0; }
 

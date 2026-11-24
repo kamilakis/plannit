@@ -35,6 +35,34 @@ def box(x0, x1, z0, z1, h0, h1, m, bevel=0.0, seg=3, name='box'):
         for p in me.polygons: p.use_smooth = True
     return o
 
+def soft(x0, x1, z0, z1, h0, h1, m, crown=0.025, r=0.035, wrinkle=0.004, name='cushion'):
+    """An upholstered cushion (24 Nov): a box() (same plan record, same cuts) made soft — its top and bottom domed by
+    `crown` (m), its sides bulged by half that, its edges rounded by `r`, and a faint cloud displacement of `wrinkle`
+    (m) for the give of filled fabric. Outside the eye-level renders it stays the plain box."""
+    o = box(x0, x1, z0, z1, h0, h1, m, name=name)
+    if o is None or not INTERIOR: return o
+    import bmesh
+    bm = bmesh.new(); bm.from_mesh(o.data)
+    bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=8, use_grid_fill=True)
+    cx, cy, ch = (x0 + x1) / 2, -(z0 + z1) / 2, (h0 + h1) / 2
+    hx, hy, hh = max((x1 - x0) / 2, 1e-6), max((z1 - z0) / 2, 1e-6), max((h1 - h0) / 2, 1e-6)
+    for v in bm.verts:
+        u, w, t = (v.co.x - cx) / hx, (v.co.y - cy) / hy, (v.co.z - ch) / hh
+        v.co.z += crown * t * max(1 - u * u, 0) * max(1 - w * w, 0)
+        v.co.x += crown * 0.5 * u * max(1 - w * w, 0) * max(1 - t * t, 0)
+        v.co.y += crown * 0.5 * w * max(1 - u * u, 0) * max(1 - t * t, 0)
+    bm.to_mesh(o.data); bm.free()
+    b = o.modifiers.new('bev', 'BEVEL'); b.width = min(r, hx * 0.9, hy * 0.9, hh * 0.9); b.segments = 3
+    b.limit_method = 'ANGLE'; b.angle_limit = math.radians(50)
+    s = o.modifiers.new('sub', 'SUBSURF'); s.levels = 1; s.render_levels = 2
+    if wrinkle > 0:
+        tex = bpy.data.textures.get('soft_wrinkle') or bpy.data.textures.new('soft_wrinkle', 'CLOUDS')
+        tex.noise_scale = 0.06
+        d = o.modifiers.new('wrinkle', 'DISPLACE'); d.texture = tex; d.strength = wrinkle; d.mid_level = 0.5
+        d.texture_coords = 'GLOBAL'
+    for p in o.data.polygons: p.use_smooth = True
+    return o
+
 def cyl(x, z, h0, h1, r, m, verts=32, r2=None, name='cyl'):
     if not INTERIOR and (h0 >= CUT - 0.2 or h1 > CUT + 0.3): return None
     bpy.ops.mesh.primitive_cone_add(vertices=verts, radius1=r, radius2=r if r2 is None else r2, depth=h1 - h0,
