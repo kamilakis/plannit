@@ -35,10 +35,11 @@ def box(x0, x1, z0, z1, h0, h1, m, bevel=0.0, seg=3, name='box'):
         for p in me.polygons: p.use_smooth = True
     return o
 
-def soft(x0, x1, z0, z1, h0, h1, m, crown=0.025, r=0.035, wrinkle=0.004, name='cushion'):
+def soft(x0, x1, z0, z1, h0, h1, m, crown=0.025, r=0.035, wrinkle=0.004, name='cushion', crown_top=None):
     """An upholstered cushion (24 Nov): a box() (same plan record, same cuts) made soft — its top and bottom domed by
     `crown` (m), its sides bulged by half that, its edges rounded by `r`, and a faint cloud displacement of `wrinkle`
-    (m) for the give of filled fabric. Outside the eye-level renders it stays the plain box."""
+    (m) for the give of filled fabric. `crown_top` overrides the top's dome (a back cushion's flatter top). Outside the
+    eye-level renders it stays the plain box."""
     o = box(x0, x1, z0, z1, h0, h1, m, name=name)
     if o is None or not INTERIOR: return o
     import bmesh
@@ -48,7 +49,7 @@ def soft(x0, x1, z0, z1, h0, h1, m, crown=0.025, r=0.035, wrinkle=0.004, name='c
     hx, hy, hh = max((x1 - x0) / 2, 1e-6), max((z1 - z0) / 2, 1e-6), max((h1 - h0) / 2, 1e-6)
     for v in bm.verts:
         u, w, t = (v.co.x - cx) / hx, (v.co.y - cy) / hy, (v.co.z - ch) / hh
-        v.co.z += crown * t * max(1 - u * u, 0) * max(1 - w * w, 0)
+        v.co.z += (crown if crown_top is None or t <= 0 else crown_top) * t * max(1 - u * u, 0) * max(1 - w * w, 0)
         v.co.x += crown * 0.5 * u * max(1 - w * w, 0) * max(1 - t * t, 0)
         v.co.y += crown * 0.5 * w * max(1 - u * u, 0) * max(1 - t * t, 0)
     bm.to_mesh(o.data); bm.free()
